@@ -104,6 +104,17 @@ python -m qec.surface.example
 }
 ```
 
+- `shot`: zero-based index of the selected shot.
+- `detector_indices`: indices of the detectors that fired.
+- `syndrome`: detector bits packed into an integer; bit i stores detector i.
+- `observable`: simulated logical flip, where 0 means no flip and 1 means a flip.
+- `prediction`: logical-flip prediction from the Python union-find decoder.
+- `pymatching`: logical-flip prediction from PyMatching.
+- `correction_edges`: graph-edge indices selected by the Python decoder.
+- `residual`: detector parity remaining after the correction; 0 means all events cancel.
+- `logical_error`: whether `prediction` differs from `observable`.
+- `tx_hex`: request bytes in hexadecimal.
+
 Add `--circuit` to print the full Stim circuit and its noise instructions.
 
 ## 3. Simulate the FPGA decoder
@@ -112,7 +123,8 @@ Add `--circuit` to print the full Stim circuit and its noise instructions.
 python qec/surface/sim.py --distance 3 --basis z --shots 256
 ```
 
-This generates detector inputs and runs the RTL decoder in Vivado Simulator.
+This optional step compares RTL predictions with the Python reference and checks
+cycle counting, backpressure and reset recovery in Vivado Simulator.
 Adjust `--distance` (odd values of 3 or greater), `--basis` (`x` or `z`) and
 `--shots` to change the code distance, memory basis and number of sampled shots.
 The board example below uses distance 3 and Z memory.
@@ -161,6 +173,34 @@ Check `build/surface_program.log` for successful FPGA programming and ARM startu
 ```sh
 python -m qec.surface.example --port "$PORT"
 ```
+
+```json
+{
+  "shot": 11,
+  "detector_indices": [
+    11
+  ],
+  "syndrome": 2048,
+  "observable": 0,
+  "prediction": 0,
+  "pymatching": 0,
+  "correction_edges": [
+    47
+  ],
+  "residual": 0,
+  "logical_error": false,
+  "tx_hex": "c3 00 03 00 08 00 c8",
+  "rx_hex": "3c 00 00 00 a9 03 00 00 96",
+  "board_prediction": 0,
+  "pl_cycles": 937
+}
+```
+
+The board run adds:
+
+- `rx_hex`: reply bytes received from the board, in hexadecimal.
+- `board_prediction`: logical-flip prediction returned by the FPGA.
+- `pl_cycles`: decoder clock cycles measured on the FPGA at 100 MHz.
 
 The example regenerates the shot from section 2 and sends its detector bits to
 the loaded surface decoder. It prints the reply, checks the prediction against
