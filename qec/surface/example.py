@@ -18,17 +18,25 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--circuit', action='store_true', help='print the full Stim circuit only')
     parser.add_argument('--port', help='send this same shot to a loaded d3 Z surface image')
+    parser.add_argument('--seed', type=int, default=None,
+                        help='Stim sampling seed (default: fresh randomness)')
+    parser.add_argument('--shots', type=int, default=256,
+                        help='number of candidate shots to sample; decode one (default: 256)')
     args = parser.parse_args()
+    if args.shots < 1:
+        parser.error('--shots must be positive')
+    if args.seed is not None and not 0 <= args.seed < 2**64:
+        parser.error('--seed must fit an unsigned 64-bit integer')
     config = json.loads(Path('qec/surface/graphs/d3_z_r3.json').read_text())
     circuit = stim.Circuit(config['circuit'])
     if args.circuit:
         print(circuit)
         return
 
-    detectors, observables = circuit.compile_detector_sampler(seed=20261107).sample(
-        256, separate_observables=True
+    detectors, observables = circuit.compile_detector_sampler(seed=args.seed).sample(
+        args.shots, separate_observables=True
     )
-    index = next(i for i, row in enumerate(detectors) if row.any())
+    index = next((i for i, row in enumerate(detectors) if row.any()), 0)
     bits = detectors[index]
     syndrome = sum(int(bit) << i for i, bit in enumerate(bits))
     result = decode(config['detectors'], config['edges'], syndrome)

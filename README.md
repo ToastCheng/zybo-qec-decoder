@@ -82,7 +82,7 @@ corrections, or run continuous feedback. It processes completed simulated shots.
 The [example](qec/surface/example.py) samples a noisy surface-code shot, decodes its detector bits with Python union-find and PyMatching, and prints both predictions alongside the simulated logical observable.
 
 ```sh
-python -m qec.surface.example
+python -m qec.surface.example --seed 20261107 --shots 256
 ```
 
 ```json
@@ -115,7 +115,9 @@ python -m qec.surface.example
 - `logical_error`: whether `prediction` differs from `observable`.
 - `tx_hex`: request bytes in hexadecimal.
 
-Add `--circuit` to print the full Stim circuit and its noise instructions.
+`--seed` makes sampling reproducible; omit it for fresh randomness. `--shots`
+sets the sampled batch size (default: 256); each run decodes one shot from that
+batch. Add `--circuit` to print the full Stim circuit and its noise instructions.
 
 ## 3. Simulate the FPGA decoder
 
@@ -171,7 +173,7 @@ Check `build/surface_program.log` for successful FPGA programming and ARM startu
 ## 6. Run the board example
 
 ```sh
-python -m qec.surface.example --port "$PORT"
+python -m qec.surface.example --seed 20261107 --shots 256 --port "$PORT"
 ```
 
 ```json

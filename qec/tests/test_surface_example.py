@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_surface_example_explains_a_real_noisy_shot():
     run = subprocess.run(
-        [sys.executable, '-m', 'qec.surface.example'],
+        [sys.executable, '-m', 'qec.surface.example', '--seed', '20261107'],
         cwd=ROOT, text=True, capture_output=True,
     )
     assert run.returncode == 0, run.stderr
@@ -48,7 +48,8 @@ def test_surface_example_serial_path():
     # A local transport endpoint only: this is not a physical FPGA result.
     master, slave = pty.openpty()
     process = subprocess.Popen(
-        [sys.executable, '-m', 'qec.surface.example', '--port', os.ttyname(slave)],
+        [sys.executable, '-m', 'qec.surface.example', '--seed', '20261107',
+         '--port', os.ttyname(slave)],
         cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
     try:
