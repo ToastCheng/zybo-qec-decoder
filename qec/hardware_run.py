@@ -32,7 +32,7 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--port',required=True)
     ap.add_argument('--out',required=True,type=Path)
-    ap.add_argument('--board-id',required=True)
+    ap.add_argument('--board-id',default=None,help='optional board label for saved results')
     ap.add_argument('--shots',type=int,default=8192)
     ap.add_argument('--seed',type=int,default=20261105)
     ap.add_argument('--noise',type=float,default=.01)

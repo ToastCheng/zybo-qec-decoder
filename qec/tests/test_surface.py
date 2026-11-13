@@ -57,7 +57,8 @@ def test_surface_host_requires_explicit_physical_target():
     assert hasattr(h,'main'), 'physical surface entry point is missing'
     import subprocess
     result=subprocess.run([sys.executable,str(path),'--shots','1'],capture_output=True,text=True)
-    assert result.returncode==2 and '--port' in result.stderr and '--board-id' in result.stderr
+    assert result.returncode==2 and '--port' in result.stderr
+    assert '--board-id' not in result.stderr.splitlines()[-1]
 
 def test_union_find_peeling_cancels_syndrome_and_tracks_observable():
     m=module()

@@ -28,7 +28,7 @@ def main():
     from decoder import graph,decode
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--port',required=True)
-    ap.add_argument('--board-id',required=True)
+    ap.add_argument('--board-id',default=None,help='optional board label for saved results')
     ap.add_argument('--out',type=Path,required=True)
     ap.add_argument('--shots',type=int,default=4096)
     ap.add_argument('--noise',type=float,default=.001)
