@@ -263,51 +263,6 @@ The example regenerates the shot from section 3 and sends its detector bits to
 the loaded surface decoder. It prints the reply, checks the prediction against
 the Python reference and checks that the cycle count is positive.
 
-### Request
-
-```python
-from qec.surface.host import request, parse
-
-seq = 0
-tx = request(seq, syndrome)
-```
-
-For `syndrome=2048`, the request is:
-
-```text
-c3 | 00       | 03     | 00 08 00       | c8
-     sequence   length   detector bytes   XOR checksum
-```
-
-`c3` is the request header. The three detector bytes are little-endian.
-
-### Response
-
-The script writes the request at 115200 baud and reads a nine-byte reply:
-
-```python
-with serial.Serial(args.port, 115200, timeout=1, write_timeout=1) as port:
-    port.reset_input_buffer()
-    assert port.write(tx) == len(tx)
-    rx = port.read(9)
-prediction, cycles = parse(rx, seq)
-```
-
-`parse()` validates the header, sequence, status, checksum and prediction.
-An archived transaction for the same syndrome appears at `index=397` in
-[qec/surface/results/hardware-d3-z-p001/transactions.csv](qec/surface/results/hardware-d3-z-p001/transactions.csv):
-
-```text
-TX: c3 8d 03 00 08 00 45
-RX: 3c | 8d       | 00     | 00         | a9 03 00 00 | 1b
-         sequence   status   prediction   PL cycles     XOR checksum
-```
-
-The reply header is `3c`, status 0 means success, and the prediction is 0.
-The little-endian cycle field is 937. At the configured 100 MHz clock, that is
-9370 ns of PL decoding time. The serial round trip also includes host, USB,
-UART, ARM and AXI time.
-
 ## 8. Capture a complete experiment
 
 After completing sections 4–7, choose a fresh output directory and run:
