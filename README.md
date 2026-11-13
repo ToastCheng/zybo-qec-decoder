@@ -72,88 +72,38 @@ The second prints the **entire actual circuit**, including its noise instruction
 The following small snippets explain the same example; they are not separate
 scripts you need to save.
 
-### 3a. What circuit, and where are the errors?
+### 3a. Circuit and noise
 
-This is a distance-3 rotated surface-code **Z-memory experiment**: initialize nine
-data qubits in Z, measure parity checks for three rounds using eight ancillas,
-then measure the data in Z. The final data measurements also contribute detectors
-and one logical observable. The hardware graph was generated for this circuit:
+The example uses a distance-3 rotated surface code with nine data qubits and
+eight ancillas. It initializes the data in Z, measures parity checks for three
+rounds, then measures the data in Z.
 
-```python
-circuit = stim.Circuit.generated(
-    "surface_code:rotated_memory_z", distance=3, rounds=3,
-    after_clifford_depolarization=0.001,
-    before_round_data_depolarization=0.001,
-    before_measure_flip_probability=0.001,
-    after_reset_flip_probability=0.001,
-)
-```
-
-Each parameter inserts stochastic noise instructions at the named locations;
-0.001 is a probability **per specified noise location**, not per shot. For
-example, here are consecutive instructions from the actual circuit:
-
-```text
-R 1 3 5 8 10 12 15 17 19
-X_ERROR(0.001) 1 3 5 8 10 12 15 17 19
-R 2 9 11 13 14 16 18 25
-X_ERROR(0.001) 2 9 11 13 14 16 18 25
-TICK
-DEPOLARIZE1(0.001) 1 3 5 8 10 12 15 17 19
-H 2 11 16 25
-DEPOLARIZE1(0.001) 2 11 16 25
-TICK
-CX 2 3 16 17 11 12 15 14 10 9 19 18
-DEPOLARIZE2(0.001) 2 3 16 17 11 12 15 14 10 9 19 18
-```
-
-`R` resets to zero; `H` and `CX` are ideal gates. `X_ERROR(p)` independently
-applies X to each listed qubit with probability p. `DEPOLARIZE1(p)` chooses a
-nonidentity single-qubit Pauli with total probability p; `DEPOLARIZE2(p)` does
-the same over the 15 nonidentity two-qubit Paulis for each listed pair. `TICK`
-separates circuit steps. Noise is sampled during simulation: there is no later
-step that randomly edits detector bits.
-
-Later, a round-to-round detector instruction such as
-`DETECTOR(2, 0, 0) rec[-8] rec[-16]` checks the XOR of two recorded measurements;
-`rec[-1]` means the most recent measurement. A detector fires when that parity
-differs from its noiseless expectation. `OBSERVABLE_INCLUDE(0)` marks the parity
-used for the true logical observable. Neither instruction performs decoding.
-
-For exact reproducibility, the example loads the circuit text from the committed
-`qec/surface/graphs/d3_z_r3.json` instead of regenerating it with a possibly different Stim version:
+Load the circuit and decoding graph:
 
 ```python
+import json
+from pathlib import Path
+import stim
+
 config = json.loads(Path("qec/surface/graphs/d3_z_r3.json").read_text())
 circuit = stim.Circuit(config["circuit"])
 ```
 
-### Why 24 detectors if there are 17 physical qubits?
-
-Distance 3 describes the code, not the number of data qubits. This **rotated**
-surface code uses **9 data qubits + 8 measurement ancillas = 17 physical qubits**.
-The ancillas measure four X-type and four Z-type parity checks and are reused
-across rounds. Detector bits count comparisons across time, not qubits:
+The circuit includes depolarizing noise after gates and before each data round,
+plus reset and measurement errors, each with probability 0.001 per location.
+For example, these instructions apply a layer of CX gates followed by two-qubit
+Pauli noise on each pair:
 
 ```text
-Initialization → round 1:      4 detectors
-Round 1 → round 2:             8 detectors
-Round 2 → round 3:             8 detectors
-Round 3 → final Z readout:     4 detectors
-                             ──
-                             24 detector bits
+CX 2 3 16 17 11 12 15 14 10 9 19 18
+DEPOLARIZE2(0.001) 2 3 16 17 11 12 15 14 10 9 19 18
 ```
 
-The initial Z preparation predicts the four Z-type checks, but not the first
-X-type outcomes. Between rounds all eight checks can be compared. The final Z
-data measurements let us reconstruct only the four Z-type checks.
+`DEPOLARIZE2(p)` applies one of the 15 nonidentity two-qubit Pauli errors with
+total probability p. Run `python -m qec.surface.example --circuit` to inspect
+the complete circuit, including its measurement and detector instructions.
 
-For example, check measurements `0, 1, 1` produce round-to-round detector bits
-`1, 0`: the check changed once, rather than experiencing a new change every round.
-A detector firing does not identify the physical error; either data errors or
-measurement errors can cause it.
-
-### 3b. Sample a shot, then pack the detector bits
+### 3b. Sample and pack a shot
 
 ```python
 detectors, observables = circuit.compile_detector_sampler(seed=20261107).sample(
@@ -164,25 +114,29 @@ bits = detectors[index]
 syndrome = sum(int(bit) << i for i, bit in enumerate(bits))
 ```
 
-A **shot** is one complete run: initialize, perform three parity-check rounds,
-and measure the data. Stim samples the noise events and the resulting circuit
-measurement statistics. The detector sampler returns quantities derived from
-those measurements, not a list of the physical errors that occurred.
+Stim samples 256 runs of the noisy circuit. `detectors` contains 24 bits per run;
+`observables` contains one bit per run. The example selects the first row with a
+firing detector and packs detector i into integer bit i.
 
-Here `detectors` has one row of 24 bits per shot and `observables` has one bit per
-shot. The observable is the designated logical Z parity's flip relative to the
-noiseless experiment: 0 means no flip, 1 means a flip. It is the ground truth for
-this simulated experiment, **not a decoding result**. The decoder tries to
-predict it from the detector bits alone. The residual logical error is the XOR
-of the prediction and this observable.
+### 3c. Decode the shot
 
-We pick a nonzero window so there is something to decode, not to estimate an
-error rate. With the installed versions, this selects shot 11 (zero-based): only
-detector 11 fires, so `syndrome = 2048 = 0x000800`. Its true observable is 0.
-Seeded output can change across Stim versions; use your printed result if it does.
-The true observable stays on the host and is **not** packed into the request.
+```python
+import pymatching
+from qec.surface.decoder import decode
 
-The software command prints this result with the versions used for verification:
+result = decode(config["detectors"], config["edges"], syndrome)
+matching = pymatching.Matching.from_detector_error_model(
+    circuit.detector_error_model(decompose_errors=True)
+)
+baseline = int(matching.decode(bits)[0])
+logical_error = result["prediction"] != int(observables[index, 0])
+```
+
+`decode()` runs the Python union-find reference. `matching.decode()` runs the
+PyMatching baseline. `logical_error` records whether the reference prediction
+differs from the simulated logical observable.
+
+Example output from `python -m qec.surface.example`:
 
 ```json
 {
@@ -199,133 +153,120 @@ The software command prints this result with the versions used for verification:
 }
 ```
 
-### 3c. Decode and distinguish the three comparisons
+Here detector 11 fires, giving `syndrome=2048`. Both decoders predict 0, matching
+the observable. The selected correction is graph edge 47; `residual=0` confirms
+that it cancels the detector parity. Seeded samples can vary across Stim versions.
 
-```python
-result = decode(config["detectors"], config["edges"], syndrome)
-matching = pymatching.Matching.from_detector_error_model(
-    circuit.detector_error_model(decompose_errors=True)
-)
-baseline = int(matching.decode(bits)[0])
-logical_error = result["prediction"] != int(observables[index, 0])
-```
+## 4. Simulate the FPGA decoder
 
-For the shot above, the Python union-find result is `prediction=0`,
-`correction_edges=[47]`; PyMatching also predicts 0. Both agree with the true
-observable, so neither has a logical error on this shot.
-
-- **FPGA versus Python union-find:** checks the hardware implementation.
-- **FPGA versus PyMatching:** compares two different decoding algorithms.
-- **Either prediction versus Stim's observable:** checks logical success.
-
-The example also checks that the selected edges cancel the detector parity
-(`residual=0`). This does **not** guarantee the correct logical answer: different
-physical errors can produce the same detectors. The board returns the prediction
-and cycle count, not the correction-edge list.
-
-## 4. Run the actual RTL before using a board
-
-These commands use AMD Vivado/Vitis **2025.2**, with Zynq-7000 support.
-Adjust the installation paths for your machine. The Python simulation runners
-accept `VIVADO_BIN`, otherwise look for `xvlog` on PATH, then try the historical
-AMD 2025.2 home-directory location.
+Install AMD Vivado/Vitis 2025.2 with Zynq-7000 support. Set the tool paths for
+your installation:
 
 ```sh
 VIVADO="$HOME/amd/2025.2/Vivado/bin"
 VITIS="$HOME/amd/2025.2/Vitis/bin"
 export VIVADO_BIN="$VIVADO"
+```
 
+Run the decoder tests, then the AXI GPIO bridge test:
+
+```sh
 python qec/surface/sim.py --distance 3 --basis z --shots 256 > build/surface_sim_d3.log 2>&1
 python qec/surface/sim.py --distance 5 --basis z --shots 128 > build/surface_sim_d5.log 2>&1
 python qec/surface/sim.py --distance 3 --basis x --shots 128 > build/surface_sim_x.log 2>&1
-$VIVADO/xvlog --sv rtl/common/surface_decoder.sv rtl/common/surface_ps_bridge.sv qec/surface/tb_bridge.sv
-$VIVADO/xelab tb_surface_bridge -s surface_bridge
-$VIVADO/xsim surface_bridge -runall > build/surface_bridge_sim.log 2>&1
+"$VIVADO/xvlog" --sv rtl/common/surface_decoder.sv rtl/common/surface_ps_bridge.sv qec/surface/tb_bridge.sv
+"$VIVADO/xelab" tb_surface_bridge -s surface_bridge
+"$VIVADO/xsim" surface_bridge -runall > build/surface_bridge_sim.log 2>&1
+python scripts/check_sim_logs.py build/surface_sim_d3.log build/surface_sim_d5.log build/surface_sim_x.log build/surface_bridge_sim.log
 ```
 
-Run each command only after the previous one succeeds. Core logs must contain
-`PASS algorithmic surface`; the bridge log must contain
-`PASS surface AXI GPIO bridge`. Reject any `Fatal:`/`FATAL`, even if xsim exits
-zero. The core runner checks these markers automatically. Keep the d3 Z run at
-256 shots: the bridge bench reads its generated 423-case vector file.
-The d5/X runs validate RTL configurations, **not** those configurations on board.
+The core tests compare RTL predictions with the Python reference and check cycle
+counts, backpressure and reset. The bridge test checks request and result transfer
+through the GPIO interface. Keep the d3 Z run at 256 shots: it generates the
+423-case vector file used by the bridge test.
 
-## 5. Build and load the surface SoC
+Each core log should contain `PASS algorithmic surface`; the bridge log should
+contain `PASS surface AXI GPIO bridge`. The log checker rejects missing PASS
+markers and HDL fatal errors.
 
-Use a **Zybo Z7-10**, powered and connected through **PROG/UART USB**. This
-USB-only design uses the ARM's UART; no Pmod wiring is needed. Install the
-Digilent Zybo board files and AMD cable drivers if not already available.
-The required board part is `digilentinc.com:zybo-z7-10:part0:1.2`. If your board
-files are not on Vivado's configured search path, set `QEC_BOARD_REPO` to their
-`board_files` directory. The build script also checks the adjacent AMD board
-directory when `XILINX_VIVADO` is set. Firmware builders are self-contained; they
-do not depend on the tutorial repository's `ps_hello` example.
+## 5. Build the bitstream and firmware
+
+Install the Digilent Zybo Z7-10 board files. The build uses board part
+`digilentinc.com:zybo-z7-10:part0:1.2`. Set `QEC_BOARD_REPO` to the `board_files`
+directory if it is outside Vivado's board search paths.
 
 ```sh
-$VIVADO/vivado -mode batch -source scripts/build_soc.tcl -tclargs top_surface_soc > build/surface_build.log 2>&1
-$VITIS/vitis -s vitis/surface/build_app.py > build/surface_firmware_build.log 2>&1
+"$VIVADO/vivado" -mode batch -source scripts/build_soc.tcl -tclargs top_surface_soc > build/surface_build.log 2>&1
+"$VITIS/vitis" -s vitis/surface/build_app.py > build/surface_firmware_build.log 2>&1
 ```
 
-Require successful builds and the actual files `build/surface_soc.bit`,
-`build/surface_soc.xsa`, and
-`build/vitis_ws/surface_app/build/surface_app.elf` before proceeding. Review
-build errors/DRCs and routed timing reports; a checkpoint is not a bitstream.
+Vivado builds the PS7/AXI GPIO design and PL decoder. Vitis builds the ARM UART
+transport firmware. Check that both commands succeed and produce:
 
-Discover the serial port (do not assume it is always `/dev/ttyUSB1`):
+```text
+build/surface_soc.bit
+build/surface_soc.xsa
+build/vitis_ws/surface_app/build/surface_app.elf
+```
+
+Review the build logs and `build/top_surface_soc_timing_summary.rpt` before
+loading the board.
+
+## 6. Load the board
+
+Power the Zybo Z7-10 and connect its PROG/UART USB port. Install AMD cable drivers
+and grant your account serial-device access. Close any serial monitor.
+
+Find the UART port:
 
 ```sh
 python -m serial.tools.list_ports -v
+PORT=/dev/ttyUSB1          # use the discovered UART port
+BOARD_ID=YOUR_BOARD_SERIAL
 ```
 
-The board's FTDI UART was `/dev/ttyUSB1` in archived runs; its recorded board
-serial was `210351BE7C3EA`. Use your actual UART port and board serial below.
-Close any serial monitor before running a host script. Ensure your account has
-serial-device access (commonly membership in `dialout`; log in again after a
-membership change).
-
-**The next command replaces the running FPGA design and restarts ARM core 0.**
-It loads volatile state over JTAG; it does not write flash or SD storage.
+The following command programs the FPGA and restarts ARM core 0. It loads volatile
+state over JTAG; power loss requires reloading.
 
 ```sh
-$VITIS/xsct scripts/run_soc.tcl build/surface_soc.bit build/vitis_ws/surface_app/build/surface_app.elf build/surface_soc.xsa > build/surface_program.log 2>&1
-$VIVADO/vivado -mode batch -source scripts/qec_readback.tcl > build/surface_readback.log 2>&1
+"$VITIS/xsct" scripts/run_soc.tcl build/surface_soc.bit build/vitis_ws/surface_app/build/surface_app.elf build/surface_soc.xsa > build/surface_program.log 2>&1
+"$VIVADO/vivado" -mode batch -source scripts/qec_readback.tcl > build/surface_readback.log 2>&1
 ```
 
-Require successful programming and configuration status DONE=1, INIT_B=1,
-CRC_ERROR=0 in the readback log. This checks configuration status, not full
-bitstream-memory readback or successful decoding. Power loss requires reloading.
+Check the program log for success and the configuration-status log for
+`DONE=1`, `INIT_B=1` and `CRC_ERROR=0`.
 
-## 6. Send exactly the window you inspected
-
-Run the **same checked-in example** with a port after loading the matching
-surface image. It deterministically regenerates the same shot; no saved-window
-file is needed. This sends a real binary request, not a text-terminal command:
+## 7. Send one shot to the FPGA
 
 ```sh
-PORT=/dev/ttyUSB1  # replace with the discovered board UART
-BOARD_ID=210351BE7C3EA  # replace with your board's serial
 python -m qec.surface.example --port "$PORT"
 ```
 
-### 6a. Build the request
+The example regenerates the shot from section 3 and sends its detector bits to
+the loaded surface decoder. It prints the reply, checks the prediction against
+the Python reference and checks that the cycle count is positive.
+
+### Request
 
 ```python
+from qec.surface.host import request, parse
+
 seq = 0
 tx = request(seq, syndrome)
 ```
 
-For the software example's `syndrome=0x000800`, `tx.hex(" ")` is:
+For `syndrome=2048`, the request is:
 
 ```text
-c3  00  03  00 08 00  c8
-│   │   │   └──────── 24 detector bits, little-endian
-│   │   └──────────── payload length: 3 bytes
-│   └──────────────── sequence: 0
-└──────────────────── request header
-                      c8 = XOR of all preceding bytes
+c3 | 00       | 03     | 00 08 00       | c8
+     sequence   length   detector bytes   XOR checksum
 ```
 
-### 6b. Send and read the reply
+`c3` is the request header. The three detector bytes are little-endian.
+
+### Response
+
+The script writes the request at 115200 baud and reads a nine-byte reply:
 
 ```python
 with serial.Serial(args.port, 115200, timeout=1, write_timeout=1) as port:
@@ -335,182 +276,72 @@ with serial.Serial(args.port, 115200, timeout=1, write_timeout=1) as port:
 prediction, cycles = parse(rx, seq)
 ```
 
-The request travels through USB UART → ARM firmware → AXI GPIO → PL. The return
-path reverses those steps. `parse()` checks length, header, checksum, sequence,
-success status and the one-bit prediction. A timeout or wrong image is an error;
-the example never substitutes a software reply.
-
-Here is a **real archived board transaction for the same syndrome** from
-[qec/surface/results/hardware-d3-z-p001/transactions.csv](qec/surface/results/hardware-d3-z-p001/transactions.csv),
-row `index=397`. It used sequence `0x8d`, not the example's sequence zero:
+`parse()` validates the header, sequence, status, checksum and prediction.
+An archived transaction for the same syndrome appears at `index=397` in
+[qec/surface/results/hardware-d3-z-p001/transactions.csv](qec/surface/results/hardware-d3-z-p001/transactions.csv):
 
 ```text
 TX: c3 8d 03 00 08 00 45
-RX: 3c 8d 00 00 a9 03 00 00 1b
-    │  │  │  │  └────────── cycles: 0x000003a9 = 937
-    │  │  │  └───────────── prediction: 0
-    │  │  └──────────────── status: 0 (success)
-    │  └─────────────────── echoed sequence: 0x8d
-    └────────────────────── reply header
-                            1b = XOR of preceding reply bytes
+RX: 3c | 8d       | 00     | 00         | a9 03 00 00 | 1b
+         sequence   status   prediction   PL cycles     XOR checksum
 ```
 
-Your new run prints its own `rx_hex`, `board_prediction` and `pl_cycles`.
-The example asserts that the board agrees with the Python union-find reference
-and reports a positive cycle count. Compare its prediction with `observable`
-for logical success, not merely with `pymatching`.
+The reply header is `3c`, status 0 means success, and the prediction is 0.
+The little-endian cycle field is 937. At the configured 100 MHz clock, that is
+9370 ns of PL decoding time. The serial round trip also includes host, USB,
+UART, ARM and AXI time.
 
-Request: `C3 | sequence | payload-length=03 | 3 syndrome bytes | XOR checksum`.
-Reply: `3C | sequence | status | prediction | 4 cycle bytes | XOR checksum`.
-Multi-byte fields are little-endian. Core time in ns is `cycles * 10` for the
-configured 100 MHz FCLK; the archived 937-cycle example is 9370 ns. This excludes
-host, USB, UART, ARM and AXI time.
+## 8. Capture a complete experiment
 
-## 7. Run and inspect the complete captured experiment
-
-After **all** simulation/build/program/readback steps above, run:
+After completing sections 4–7, choose a fresh output directory and run:
 
 ```sh
-python qec/surface/host.py --port "$PORT" --board-id "$BOARD_ID" --shots 4096 --noise .001 --seed 20261107 --out build/manual-surface-run
+python qec/surface/host.py --port "$PORT" --board-id "$BOARD_ID" --shots 4096 --noise .001 --seed 20261107 --out build/surface-run
 ```
 
-Use a fresh output directory every time. The runner first checks zero, single
-detectors, graph-edge syndromes and dense windows, then samples and decodes the
-Stim shots. It also tests malformed-packet recovery and explicit PL reset.
-The `--board-id` value is an archive label, not automatic board identification.
+The runner tests diagnostic detector patterns, decodes 4096 Stim shots, checks
+malformed-packet recovery and resets the PL decoder. `--board-id` labels the
+archive with your board's serial.
 
-Inspect `build/manual-surface-run/summary.json` and `transactions.csv`:
+Inspect `build/surface-run/summary.json`:
 
-- `uf_mismatches` must be zero: hardware agrees with this algorithm's reference.
-- `logical_errors` counts FPGA predictions different from true Stim observables.
-- `pymatching_logical_errors` is a weighted matching baseline; disagreements with
-  this different algorithm are not automatically RTL failures.
-- `cycles_min/median/max` measures the PL boundary; `host_stim_ns_median` includes
-  the serial transaction. Do not interpret one as the other.
-- Only `kind=stim` CSV rows support sampled logical-error statistics. Other rows
-  are diagnostics. `manifest.json` hashes the archived files.
+- `uf_mismatches`: FPGA predictions that differ from the Python reference;
+  this count should be zero.
+- `logical_errors`: FPGA predictions that differ from Stim's observable.
+- `pymatching_logical_errors`: PyMatching predictions that differ from Stim's
+  observable.
+- `cycles_min/median/max`: PL decoder cycle counts.
+- `host_stim_ns_median`: host serial round-trip time for Stim shots.
 
-The capture runner also copies all three simulation logs, bridge log, build and
-program/readback logs, timing/utilization reports, bitstream, XSA and ELF. Missing
-prerequisite artifacts can fail archiving **after** transactions have run; do not
-skip earlier steps or reuse stale logs from another build. Avoid source edits
-between build and capture: its source snapshot is `git archive HEAD`, with dirty
-status recorded separately. There is no software-loopback fallback in this path.
+`transactions.csv` contains detector inputs, predictions, observables, cycle
+counts and raw frames. Use its `kind=stim` rows for logical-error statistics.
 
-## 8. Prefer the smaller repetition-code sample?
+The runner copies the simulation, build, program and readback logs, timing and
+utilization reports, bitstream, XSA and ELF into the output directory. It also
+archives the circuit and Git HEAD and writes file hashes to `manifest.json`.
+Keep the prerequisite logs and artifacts from the same build, and commit source
+changes before capture. Missing artifacts cause archiving to fail.
 
-For a no-board software demo:
+## 9. Run the repetition-code sample
+
+For a software run:
 
 ```sh
 python qec/host.py --mode loopback --shots 20000 --seed 90210
 ```
 
-For actual board decoding, replace **both** the surface bitstream and firmware:
+For a board run, build and load the repetition bitstream and firmware:
 
 ```sh
-$VIVADO/vivado -mode batch -source scripts/build_soc.tcl -tclargs top_qec_soc > build/qec_soc_build.log 2>&1
-$VITIS/vitis -s vitis/qec/build_app.py > build/qec_firmware_build.log 2>&1
-$VITIS/xsct scripts/run_soc.tcl build/qec_soc.bit build/vitis_ws/qec_app/build/qec_app.elf build/qec_soc.xsa > build/qec_program.log 2>&1
-$VIVADO/vivado -mode batch -source scripts/qec_readback.tcl > build/qec_readback.log 2>&1
-python qec/hardware_run.py --port "$PORT" --board-id "$BOARD_ID" --shots 4096 --noise .001 --seed 20261105 --out build/manual-repetition-run
+"$VIVADO/vivado" -mode batch -source scripts/build_soc.tcl -tclargs top_qec_soc > build/qec_soc_build.log 2>&1
+"$VITIS/vitis" -s vitis/qec/build_app.py > build/qec_firmware_build.log 2>&1
+"$VITIS/xsct" scripts/run_soc.tcl build/qec_soc.bit build/vitis_ws/qec_app/build/qec_app.elf build/qec_soc.xsa > build/qec_program.log 2>&1
+"$VIVADO/vivado" -mode batch -source scripts/qec_readback.tcl > build/qec_readback.log 2>&1
+python qec/hardware_run.py --port "$PORT" --board-id "$BOARD_ID" --shots 4096 --noise .001 --seed 20261105 --out build/repetition-run
 ```
 
-Apply the same build/configuration checks as above before sending requests.
-This sample packs eight detectors into one byte; the PL looks up a logical flip
-in `qec/lut.mem`. The runner exhausts all 256 inputs, samples real Stim shots,
-and checks malformed-frame recovery. Evaluate sampled accuracy under the
-summary's `stim` object, not the diagnostic `exhaustive` object. Its four-byte
-request/six-byte response is **not** the surface protocol. To return to surface,
-repeat the surface load command in step 5 with its own bitstream, ELF and XSA.
-
-## Troubleshooting and further reading
-
-- **No UART/JTAG device:** check board power, data-capable USB cable, drivers and
-  permissions. Seeing a UART does not establish a working JTAG connection.
-- **Timeout/invalid reply:** close serial monitors; confirm port, 115200 baud,
-  successful ARM start, and matching bitstream/firmware/host. Do not assume the
-  previously loaded image survived a power cycle.
-- **Prediction differs from Stim but matches reference:** possible decoder error;
-  syndrome agreement alone does not establish logical success.
-- **Want PL-only UART?** That separate design needs a 3.3 V TTL adapter on
-  JE1/V12 (FPGA RX), JE2/W16 (FPGA TX), and ground. The onboard USB UART does
-  not directly reach those PL pins. `scripts/qec_build.tcl` is report-only,
-  not a replacement for the SoC bitstream build.
-
-- **Vitis platform creation fails inside vendor `repo.py`:** the initial
-  standalone validation encountered `NoneType.keys` in a fresh workspace; an
-  unchanged rerun and subsequent builds succeeded. The cause is not established.
-  Retain the failing log and retry the firmware build. Persistent failures need
-  investigation; do not substitute an ELF from a historical experiment.
-
-## Repository layout and Make shortcuts
-
-```text
-qec/                 Stim models, host transports, tests and repetition LUT
-qec/surface/         Surface graph/reference, example, RTL benches and results
-rtl/common/          Decoder cores, PS bridges, UART and synchronizers
-rtl/top/             Surface/repetition SoCs and repetition PL-UART top
-rtl/tb/              Repetition and UART testbenches
-scripts/             Simulation, implementation, SoC build and JTAG loading
-scripts/bd/          PS7/AXI GPIO block designs
-constraints/         Zybo Z7-10 pin and timing constraints
-vitis/qec/           Repetition ARM transport firmware and standalone builder
-vitis/surface/       Surface ARM transport firmware and standalone builder
-```
-
-The explicit commands above show each boundary. These Make targets are convenient
-shortcuts after environment setup:
-
-```sh
-make test
-make example
-make sim                  # repetition core and UART RTL
-make sim_surface          # d3 Z, d5 Z, d3 X; writes capture prerequisite logs
-make sim_bridge           # both PS bridges; run sim_surface first
-```
-
-The SoC defaults are `SOC_TOP=top_surface_soc` and `APP=surface`:
-
-```sh
-make build_soc > build/surface_build.log 2>&1
-make app > build/surface_firmware_build.log 2>&1
-# With the board connected, replace its volatile design and start ARM firmware:
-make run_soc > build/surface_program.log 2>&1
-make readback > build/surface_readback.log 2>&1
-```
-
-For repetition, pass `SOC_TOP=top_qec_soc` to `build_soc`/`run_soc` and `APP=qec`
-to `app`/`run_soc`. Use the repetition log names shown in section 8. Make tool
-variables `VIVADO`, `VITIS`, `XSCT`, `XVLOG`, `XELAB`, and `XSIM` name executables;
-for example, `make build_soc VIVADO="$VIVADO/vivado"`. Put the AMD bin directories
-on PATH when using the default names. The shell variables `$VIVADO` and `$VITIS`
-in the explicit commands above instead name bin **directories**.
-
-For synthesized repetition-ROM verification:
-
-```sh
-make reports MODE=core
-make netlist
-```
-
-`make reports MODE=uart` runs the separate PL-UART report-only flow. It does not
-produce a programmable USB-only SoC bitstream.
-
-## Results, verification and provenance
-
-- [VERIFICATION.json](VERIFICATION.json) records the standalone extraction checks,
-  build-artifact/log hashes and routed timing. Both decoder SoCs and ARM firmware
-  were built locally; the extraction did **not** reprogram or test a physical board.
-- [IMPORT.json](IMPORT.json) records the original repository revision, imported
-  hashes, standalone adaptations and explicit omissions. The project uses a fresh
-  Git history on `main`; historical source revisions belong to
-  [zybo-z7-tutorial](https://github.com/ToastCheng/zybo-z7-tutorial).
-- Archived [repetition results](qec/results/) and
-  [surface results](qec/surface/results/) retain their original files and manifests.
-  Their measurements are historical evidence, not new board validation of this
-  revision. The old source tarballs containing tutorial material were omitted,
-  not repacked; these are intentionally incomplete local historical bundles.
-  Retrieve omitted artifacts from the original revision recorded in `IMPORT.json`.
-- New physical captures archive **this repository's committed HEAD**. Basic FPGA
-  and audio tutorials remain in the old repository; this README is the standalone
-  QEC circuit-to-board guide.
+Apply the build and configuration checks from sections 5–6 before running the
+host command. This decoder packs eight detector bits into one byte and reads
+its prediction from `qec/lut.mem`. The runner checks all 256 inputs, then samples
+Stim shots and tests packet recovery. Sampled accuracy is in `summary.json` under
+`stim`.
