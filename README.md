@@ -60,7 +60,7 @@ Python requirements include Stim, PyMatching, NumPy, pyserial and pytest.
 
 ## 3. Manually inspect one noisy shot in software
 
-One runnable example is [qec/surface/example.py](qec/surface/example.py).
+The [example](qec/surface/example.py) samples a noisy surface-code shot, decodes its detector bits with Python union-find and PyMatching, and prints both predictions alongside the simulated logical observable.
 
 ```sh
 python -m qec.surface.example
@@ -86,82 +86,6 @@ python -m qec.surface.example
 ```
 
 Add `--circuit` to print the full Stim circuit and its noise instructions.
-
-Here detector 11 fires, giving `syndrome=2048`. Both decoders predict 0, matching
-the observable. The selected correction is graph edge 47; `residual=0` confirms
-that it cancels the detector parity. Seeded samples can vary across Stim versions.
-
-<details>
-<summary>3a. Circuit and noise</summary>
-
-The example uses a distance-3 rotated surface code with nine data qubits and
-eight ancillas. It initializes the data in Z, measures parity checks for three
-rounds, then measures the data in Z.
-
-Load the circuit and decoding graph:
-
-```python
-import json
-from pathlib import Path
-import stim
-
-config = json.loads(Path("qec/surface/graphs/d3_z_r3.json").read_text())
-circuit = stim.Circuit(config["circuit"])
-```
-
-The circuit includes depolarizing noise after gates and before each data round,
-plus reset and measurement errors, each with probability 0.001 per location.
-For example, these instructions apply a layer of CX gates followed by two-qubit
-Pauli noise on each pair:
-
-```text
-CX 2 3 16 17 11 12 15 14 10 9 19 18
-DEPOLARIZE2(0.001) 2 3 16 17 11 12 15 14 10 9 19 18
-```
-
-`DEPOLARIZE2(p)` applies one of the 15 nonidentity two-qubit Pauli errors with
-total probability p.
-
-</details>
-
-<details>
-<summary>3b. Sample and pack a shot</summary>
-
-```python
-detectors, observables = circuit.compile_detector_sampler(seed=20261107).sample(
-    256, separate_observables=True
-)
-index = next(i for i, row in enumerate(detectors) if row.any())
-bits = detectors[index]
-syndrome = sum(int(bit) << i for i, bit in enumerate(bits))
-```
-
-Stim samples 256 runs of the noisy circuit. `detectors` contains 24 bits per run;
-`observables` contains one bit per run. The example selects the first row with a
-firing detector and packs detector i into integer bit i.
-
-</details>
-
-<details>
-<summary>3c. Decode the shot</summary>
-
-```python
-import pymatching
-from qec.surface.decoder import decode
-
-result = decode(config["detectors"], config["edges"], syndrome)
-matching = pymatching.Matching.from_detector_error_model(
-    circuit.detector_error_model(decompose_errors=True)
-)
-baseline = int(matching.decode(bits)[0])
-logical_error = result["prediction"] != int(observables[index, 0])
-```
-
-`decode()` runs the Python union-find reference. `matching.decode()` runs the
-PyMatching baseline. `logical_error` records whether the reference prediction
-differs from the simulated logical observable.
-
-</details>
 
 ## 4. Simulate the FPGA decoder
 
