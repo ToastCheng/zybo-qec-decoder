@@ -1,0 +1,171 @@
+zybo-qec-decoder
+================
+
+Standalone QEC decoder experiments for the Digilent Zybo Z7-10
+(xc7z010clg400-1). No checkout of zybo-z7-tutorial is required.
+
+Two independent designs are included:
+
+* surface: distance-3 rotated surface-code Z memory, three rounds, 24 detectors;
+  serial unweighted half-edge union-find and forest peeling in programmable logic.
+* qec: distance-3 repetition memory, three rounds, eight detectors; a committed
+  256-entry PyMatching-derived logical-flip lookup table in programmable logic.
+
+The host uses Stim to simulate noisy quantum circuits. Only detector bits are
+sent to the board, not the circuit or its true observable. ARM firmware bridges
+the onboard USB UART to AXI GPIO and the PL decoder. The reply contains a logical
+flip prediction and measured PL cycles. Compare with the matching Python decoder
+for implementation correctness, PyMatching for an algorithm baseline, and Stim's
+true observable for logical success. This is a completed-shot experiment, not a
+quantum-processor interface, physical qubit correction or continuous feedback.
+
+Quick software check (repository root)
+-------------------------------------
+
+  uv venv --python 3.12 qec/.venv
+  uv pip install --python qec/.venv/bin/python -r qec/requirements.txt
+  source qec/.venv/bin/activate
+  make test
+  make example
+  python -m qec.surface.example --circuit
+  python qec/host.py --mode loopback --shots 20000 --seed 90210
+
+The example uses the committed noisy circuit and graph, selects the first
+nonzero window from 256 seeded shots, and prints detector indices, packed
+syndrome, true observable, union-find and PyMatching predictions, correction
+edges and request bytes. The selection is illustrative, not an accuracy sample.
+It makes no board connection unless --port is supplied. The loopback command is
+software only. The circuit's four noise parameters are each 0.001: depolarization
+after Clifford gates and before data rounds, measurement flips and reset flips.
+
+Hardware/tool requirements
+--------------------------
+
+* Vivado and Vitis unified 2025.2 with Zynq-7000 support; Linux build tools and
+  unzip. Source the installation's settings64.sh or put the tool bin directories
+  on PATH. Vitis is needed only to build the ARM applications.
+* Digilent Zybo Z7-10 board files, cable drivers and a powered board for loading.
+  Set QEC_BOARD_REPO to the installed board_files directory if needed. Otherwise
+  build_soc.tcl uses the adjacent AMD board directory when available, or Vivado's
+  configured search paths. The board part is digilentinc.com:zybo-z7-10:part0:1.2.
+* Onboard PROG/UART USB cable and serial-device permission for the USB-only SoC.
+  An external adapter is NOT needed for this path. The separate PL-only UART
+  requires 3.3 V TTL wiring: host TX -> JE1/V12, host RX <- JE2/W16, common ground.
+
+Simulation (no board)
+---------------------
+
+  mkdir -p build
+  make sim
+  make sim_surface
+  make sim_bridge
+  QEC_RTL=1 python -m pytest qec/tests -q
+
+make sim_surface writes the three logs required by the surface capture runner.
+Keep its d3 Z run at 256 shots: the surface bridge bench uses that 423-case vector
+file. Run sim_surface before sim_bridge. A PASS marker is required and any HDL
+fatal invalidates a run even if xsim exits zero. All simulation runners accept
+VIVADO_BIN for an alternate tool-bin directory and otherwise look on PATH before
+the historical AMD 2025.2 home-directory fallback. Tool paths for make can also
+be overridden with VIVADO, VITIS, XSCT, XVLOG, XELAB and XSIM.
+
+Build a fresh surface image and firmware
+---------------------------------------
+
+  make build_soc > build/surface_build.log 2>&1
+  make app > build/surface_firmware_build.log 2>&1
+
+Defaults are SOC_TOP=top_surface_soc and APP=surface. Outputs:
+  build/surface_soc.bit
+  build/surface_soc.xsa
+  build/vitis_ws/surface_app/build/surface_app.elf
+
+Check build success, DRCs and routed timing. This makes a real PS+PL bitstream;
+scripts/qec_build.tcl instead generates report-only core/PL-UART checkpoints.
+
+Local verification is recorded in VERIFICATION.json. During initial validation,
+the first fresh-workspace Vitis platform creation failed inside vendor repo.py
+with NoneType.keys; an unchanged rerun and later builds succeeded. The cause is
+not established. If this occurs, retain the log and retry make app; persistent
+failures need investigation, not a fallback ELF from an old experiment.
+
+Load and inspect one actual board request
+----------------------------------------
+
+The following replaces the running PL design and restarts ARM core 0 via JTAG.
+It loads volatile state only, not flash or SD. Power loss requires reloading.
+
+  python -m serial.tools.list_ports -v
+  make run_soc > build/surface_program.log 2>&1
+  make readback > build/surface_readback.log 2>&1
+  python -m qec.surface.example --port /dev/ttyUSB1
+
+Replace the port with the discovered board UART and close serial monitors first.
+Require DONE=1, INIT_B=1 and CRC_ERROR=0 in the configuration-status log. That is
+not a full bitstream-memory readback and does not itself verify decoding.
+
+Surface request: C3 | sequence | length=03 | 3 syndrome bytes | XOR checksum
+Surface reply:   3C | sequence | status | prediction | 4 cycle bytes | XOR checksum
+All multi-byte fields are little-endian. Detector i maps to integer bit i.
+For syndrome 2048 and sequence 0, the request is c3 00 03 00 08 00 c8.
+A prediction of 1 means invert the logical-result interpretation, not apply a
+physical qubit operation. At the configured 100 MHz FCLK, core ns = cycles * 10;
+this excludes PS, AXI, USB, UART and host latency.
+
+Full physical capture (fresh output directory)
+----------------------------------------------
+
+After all simulations, builds, program and readback above have succeeded:
+
+  python qec/surface/host.py --port /dev/ttyUSB1 --board-id YOUR_BOARD_SERIAL \
+    --shots 4096 --noise .001 --seed 20261107 --out build/surface-run
+
+The board-id is an archive label, not device discovery. The runner validates
+zero/single-detector/edge/dense windows, real Stim shots, malformed traffic and
+PL reset recovery. It archives raw frames, circuit, source snapshot, manifests,
+logs, reports and build artifacts. Do not skip prerequisites or change sources
+between build and capture. Commit sources first: source snapshots use Git HEAD.
+Missing prerequisite files can cause archiving to fail after transactions.
+Only kind=stim rows support logical-error statistics. uf_mismatches must be zero;
+disagreement with the different PyMatching algorithm is not itself an RTL bug.
+
+Repetition alternative
+----------------------
+
+  make build_soc SOC_TOP=top_qec_soc > build/qec_soc_build.log 2>&1
+  make app APP=qec > build/qec_firmware_build.log 2>&1
+  make run_soc SOC_TOP=top_qec_soc APP=qec > build/qec_program.log 2>&1
+  make readback > build/qec_readback.log 2>&1
+  python qec/hardware_run.py --port /dev/ttyUSB1 --board-id YOUR_BOARD_SERIAL \
+    --shots 4096 --noise .001 --seed 20261105 --out build/repetition-run
+
+Build/load checks are the same. Surface and repetition bitstreams, firmware and
+packet formats are incompatible; replace BOTH before switching. Repetition uses
+four-byte requests and six-byte replies (see qec/transport.py). For synthesized
+ROM verification: make reports MODE=core, then make netlist. MODE=uart reports the
+external-PL-UART implementation; it does not generate a programmable SoC image.
+
+Layout and provenance
+---------------------
+
+qec/                  Stim models, host transports, tests, LUT and results
+qec/surface/          Surface graph/reference, example, RTL benches and results
+rtl/common/           Decoder cores, PS bridges and required UART/synchronizers
+rtl/top/              QEC SoC and standalone repetition UART top levels
+rtl/tb/               Repetition/UART testbenches
+scripts/              QEC simulation, synthesis, SoC build and JTAG loading
+scripts/bd/           PS7/AXI GPIO block designs
+constraints/          Zybo Z7-10 QEC and board pin/timing constraints
+vitis/qec, surface/   Self-contained ARM firmware builds and sources
+
+IMPORT.json records the original source revision, imported-file hashes and
+explicit omissions. Archived result manifests remain unchanged; their source
+revisions refer to zybo-z7-tutorial, NOT this repository. Historical Markdown and
+source tarballs containing tutorial material were intentionally omitted and are
+listed in IMPORT.json; those historical bundles are not complete local archives.
+Retrieve omitted artifacts from the recorded original repository revision.
+Archived measurements and binaries are historical evidence, not fresh validation
+of this standalone revision. New captures archive this repository's own HEAD.
+
+Basic FPGA/audio/tutorial projects and all Markdown files are intentionally
+excluded. This plain-text README documents operational entry points only.
