@@ -10,7 +10,7 @@ Run all commands from the **repository root**. This guide uses the algorithmic
 **surface-code sample** first (distance 3, three rounds, Z memory), then shows
 how to switch to the smaller repetition-code LUT sample.
 
-## 1. What actually happens?
+## 1. Workflow
 
 ```mermaid
 flowchart TD
@@ -46,7 +46,7 @@ Stim supplies both the detector input and the true logical flip for evaluation.
 logical measurement interpretation. The sample does not connect to a quantum processor, execute physical
 corrections, or run continuous feedback. It processes completed simulated shots.
 
-## 2. Prepare Python (no board needed)
+## 2. Prepare Python
 
 ```sh
 uv venv --python 3.12 qec/.venv
@@ -64,15 +64,35 @@ One runnable example is [qec/surface/example.py](qec/surface/example.py).
 
 ```sh
 python -m qec.surface.example
-python -m qec.surface.example --circuit
 ```
 
-The first command shows one nonzero detector window from 256 seeded shots.
-The second prints the **entire actual circuit**, including its noise instructions.
-The following small snippets explain the same example; they are not separate
-scripts you need to save.
+```json
+{
+  "shot": 11,
+  "detector_indices": [
+    11
+  ],
+  "syndrome": 2048,
+  "observable": 0,
+  "prediction": 0,
+  "pymatching": 0,
+  "correction_edges": [
+    47
+  ],
+  "residual": 0,
+  "logical_error": false,
+  "tx_hex": "c3 00 03 00 08 00 c8"
+}
+```
 
-### 3a. Circuit and noise
+Add `--circuit` to print the full Stim circuit and its noise instructions.
+
+Here detector 11 fires, giving `syndrome=2048`. Both decoders predict 0, matching
+the observable. The selected correction is graph edge 47; `residual=0` confirms
+that it cancels the detector parity. Seeded samples can vary across Stim versions.
+
+<details>
+<summary>3a. Circuit and noise</summary>
 
 The example uses a distance-3 rotated surface code with nine data qubits and
 eight ancillas. It initializes the data in Z, measures parity checks for three
@@ -100,10 +120,12 @@ DEPOLARIZE2(0.001) 2 3 16 17 11 12 15 14 10 9 19 18
 ```
 
 `DEPOLARIZE2(p)` applies one of the 15 nonidentity two-qubit Pauli errors with
-total probability p. Run `python -m qec.surface.example --circuit` to inspect
-the complete circuit, including its measurement and detector instructions.
+total probability p.
 
-### 3b. Sample and pack a shot
+</details>
+
+<details>
+<summary>3b. Sample and pack a shot</summary>
 
 ```python
 detectors, observables = circuit.compile_detector_sampler(seed=20261107).sample(
@@ -118,7 +140,10 @@ Stim samples 256 runs of the noisy circuit. `detectors` contains 24 bits per run
 `observables` contains one bit per run. The example selects the first row with a
 firing detector and packs detector i into integer bit i.
 
-### 3c. Decode the shot
+</details>
+
+<details>
+<summary>3c. Decode the shot</summary>
 
 ```python
 import pymatching
@@ -136,47 +161,39 @@ logical_error = result["prediction"] != int(observables[index, 0])
 PyMatching baseline. `logical_error` records whether the reference prediction
 differs from the simulated logical observable.
 
-Example output from `python -m qec.surface.example`:
-
-```json
-{
-  "shot": 11,
-  "detector_indices": [11],
-  "syndrome": 2048,
-  "observable": 0,
-  "prediction": 0,
-  "pymatching": 0,
-  "correction_edges": [47],
-  "residual": 0,
-  "logical_error": false,
-  "tx_hex": "c3 00 03 00 08 00 c8"
-}
-```
-
-Here detector 11 fires, giving `syndrome=2048`. Both decoders predict 0, matching
-the observable. The selected correction is graph edge 47; `residual=0` confirms
-that it cancels the detector parity. Seeded samples can vary across Stim versions.
+</details>
 
 ## 4. Simulate the FPGA decoder
 
-Install AMD Vivado/Vitis 2025.2 with Zynq-7000 support. Set the tool paths for
-your installation:
+Install AMD Vivado/Vitis 2025.2 with Zynq-7000 support. Add their bin directories
+to PATH, adjusting the installation paths below:
 
 ```sh
-VIVADO="$HOME/amd/2025.2/Vivado/bin"
-VITIS="$HOME/amd/2025.2/Vitis/bin"
-export VIVADO_BIN="$VIVADO"
+export PATH="$HOME/amd/2025.2/Vivado/bin:$HOME/amd/2025.2/Vitis/bin:$PATH"
 ```
 
 Run the decoder tests, then the AXI GPIO bridge test:
 
 ```sh
+# Simulate distance-3 Z memory with 256 Stim shots; generate the bridge test vectors.
 python qec/surface/sim.py --distance 3 --basis z --shots 256 > build/surface_sim_d3.log 2>&1
+
+# Simulate distance-5 Z memory to test the decoder with a larger graph.
 python qec/surface/sim.py --distance 5 --basis z --shots 128 > build/surface_sim_d5.log 2>&1
+
+# Simulate distance-3 X memory to test the X-basis graph.
 python qec/surface/sim.py --distance 3 --basis x --shots 128 > build/surface_sim_x.log 2>&1
-"$VIVADO/xvlog" --sv rtl/common/surface_decoder.sv rtl/common/surface_ps_bridge.sv qec/surface/tb_bridge.sv
-"$VIVADO/xelab" tb_surface_bridge -s surface_bridge
-"$VIVADO/xsim" surface_bridge -runall > build/surface_bridge_sim.log 2>&1
+
+# Compile the decoder, AXI GPIO bridge and bridge testbench.
+xvlog --sv rtl/common/surface_decoder.sv rtl/common/surface_ps_bridge.sv qec/surface/tb_bridge.sv
+
+# Elaborate the testbench into a runnable snapshot named surface_bridge.
+xelab tb_surface_bridge -s surface_bridge
+
+# Run the bridge simulation and save its output.
+xsim surface_bridge -runall > build/surface_bridge_sim.log 2>&1
+
+# Check all four logs for PASS markers and HDL fatal errors.
 python scripts/check_sim_logs.py build/surface_sim_d3.log build/surface_sim_d5.log build/surface_sim_x.log build/surface_bridge_sim.log
 ```
 
@@ -196,8 +213,8 @@ Install the Digilent Zybo Z7-10 board files. The build uses board part
 directory if it is outside Vivado's board search paths.
 
 ```sh
-"$VIVADO/vivado" -mode batch -source scripts/build_soc.tcl -tclargs top_surface_soc > build/surface_build.log 2>&1
-"$VITIS/vitis" -s vitis/surface/build_app.py > build/surface_firmware_build.log 2>&1
+vivado -mode batch -source scripts/build_soc.tcl -tclargs top_surface_soc > build/surface_build.log 2>&1
+vitis -s vitis/surface/build_app.py > build/surface_firmware_build.log 2>&1
 ```
 
 Vivado builds the PS7/AXI GPIO design and PL decoder. Vitis builds the ARM UART
@@ -229,8 +246,8 @@ The following command programs the FPGA and restarts ARM core 0. It loads volati
 state over JTAG; power loss requires reloading.
 
 ```sh
-"$VITIS/xsct" scripts/run_soc.tcl build/surface_soc.bit build/vitis_ws/surface_app/build/surface_app.elf build/surface_soc.xsa > build/surface_program.log 2>&1
-"$VIVADO/vivado" -mode batch -source scripts/qec_readback.tcl > build/surface_readback.log 2>&1
+xsct scripts/run_soc.tcl build/surface_soc.bit build/vitis_ws/surface_app/build/surface_app.elf build/surface_soc.xsa > build/surface_program.log 2>&1
+vivado -mode batch -source scripts/qec_readback.tcl > build/surface_readback.log 2>&1
 ```
 
 Check the program log for success and the configuration-status log for
@@ -333,10 +350,10 @@ python qec/host.py --mode loopback --shots 20000 --seed 90210
 For a board run, build and load the repetition bitstream and firmware:
 
 ```sh
-"$VIVADO/vivado" -mode batch -source scripts/build_soc.tcl -tclargs top_qec_soc > build/qec_soc_build.log 2>&1
-"$VITIS/vitis" -s vitis/qec/build_app.py > build/qec_firmware_build.log 2>&1
-"$VITIS/xsct" scripts/run_soc.tcl build/qec_soc.bit build/vitis_ws/qec_app/build/qec_app.elf build/qec_soc.xsa > build/qec_program.log 2>&1
-"$VIVADO/vivado" -mode batch -source scripts/qec_readback.tcl > build/qec_readback.log 2>&1
+vivado -mode batch -source scripts/build_soc.tcl -tclargs top_qec_soc > build/qec_soc_build.log 2>&1
+vitis -s vitis/qec/build_app.py > build/qec_firmware_build.log 2>&1
+xsct scripts/run_soc.tcl build/qec_soc.bit build/vitis_ws/qec_app/build/qec_app.elf build/qec_soc.xsa > build/qec_program.log 2>&1
+vivado -mode batch -source scripts/qec_readback.tcl > build/qec_readback.log 2>&1
 python qec/hardware_run.py --port "$PORT" --board-id "$BOARD_ID" --shots 4096 --noise .001 --seed 20261105 --out build/repetition-run
 ```
 
