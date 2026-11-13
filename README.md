@@ -117,7 +117,9 @@ python -m qec.surface.example --seed 20261107 --shots 256
 
 `--seed` makes sampling reproducible; omit it for fresh randomness. `--shots`
 sets the sampled batch size (default: 256); each run decodes one shot from that
-batch. Add `--circuit` to print the full Stim circuit and its noise instructions.
+batch. `--noise` sets the error probability at each gate, reset and measurement
+noise location (default: 0.001, range: 0–0.75); use 0 to disable noise. Add
+`--circuit` to print the full Stim circuit and its noise instructions.
 
 ## 3. Simulate the FPGA decoder
 

@@ -10,7 +10,7 @@ from pathlib import Path
 import pymatching
 import stim
 
-from qec.surface.decoder import decode
+from qec.surface.decoder import decode, graph
 from qec.surface.host import parse, request
 
 
@@ -22,13 +22,21 @@ def main():
                         help='Stim sampling seed (default: fresh randomness)')
     parser.add_argument('--shots', type=int, default=256,
                         help='number of candidate shots to sample; decode one (default: 256)')
+    parser.add_argument('--noise', type=float, default=0.001,
+                        help='error probability at each noise location, 0 to 0.75 inclusive (default: 0.001)')
     args = parser.parse_args()
+    if not 0 <= args.noise <= 0.75:
+        parser.error('--noise must be between 0 and 0.75 (inclusive)')
     if args.shots < 1:
         parser.error('--shots must be positive')
     if args.seed is not None and not 0 <= args.seed < 2**64:
         parser.error('--seed must fit an unsigned 64-bit integer')
     config = json.loads(Path('qec/surface/graphs/d3_z_r3.json').read_text())
-    circuit = stim.Circuit(config['circuit'])
+    circuit_text = config['circuit']
+    if args.noise != config['noise']:
+        circuit_text = graph(distance=config['distance'], rounds=config['rounds'],
+                             basis=config['basis'], noise=args.noise)['circuit']
+    circuit = stim.Circuit(circuit_text)
     if args.circuit:
         print(circuit)
         return
@@ -51,6 +59,7 @@ def main():
     matching = pymatching.Matching.from_detector_error_model(
         circuit.detector_error_model(decompose_errors=True)
     )
+    matching.ensure_num_fault_ids(circuit.num_observables)
     seq = 0
     tx = request(seq, syndrome)
     window = dict(
