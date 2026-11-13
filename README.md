@@ -36,6 +36,44 @@ directory if it is outside Vivado's board search paths.
 Connect the powered board through its PROG/UART USB port and grant your account
 serial-device access.
 
+## Interactive software lab (no board required)
+
+After the Python setup above, launch the local web interface from the repository root:
+
+```sh
+python -m qec.surface.web --port 8765
+```
+
+Open **http://127.0.0.1:8765/**. No Vivado, serial connection, frontend build, or
+additional Python dependencies are needed. The server binds only to loopback;
+stop it with Ctrl+C.
+
+Choose X, Z, or Y and click one or more data qubits, then use **Next step** or
+**Run correction** to follow clean → error → detector bits → correction.
+Select a check ancilla to see its CX-derived data support. The timeline shows
+all 24 detectors at their actual Stim coordinates, including the initial and
+final boundaries. The inspector exposes the existing union-find decoder's
+selected graph edges, logical prediction, and complete replay circuits.
+
+Faults are deterministic Pauli injections immediately after the first ancilla
+measurement/reset, before round 2 gates, in an otherwise noiseless d3 Z-memory
+circuit. Decoding uses the committed circuit-noise graph and unweighted UF
+schedule. The displayed physical correction is a minimum-weight Pauli
+representative of the decoder's detector signature and predicted Z observable,
+computed from Stim-simulated single-fault effects; graph edges are **not** unique
+physical gates. The verification circuit replays this representative at the
+original injection point, not as causal feedback after detection. A zero
+residual syndrome does **not** guarantee logical success; the independent
+Z-observable comparison is shown explicitly. This is a completed-shot,
+software-only teaching lab, not arbitrary-state recovery or board execution.
+
+Regression checks (Node.js is needed only for the browser-state tests):
+
+```sh
+python -m pytest qec/tests/test_web.py -q
+node --test qec/tests/test_web_ui.cjs
+```
+
 ## Quick start: manually decode a complete window
 
 Run all commands from the repository root. The example uses a distance-3

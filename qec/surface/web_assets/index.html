@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Surface code / QEC lab</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <div class="wordmark">QEC <span>/</span> LAB</div>
+      <div class="header-note">
+        STIM + UNION-FIND <span class="live-dot"></span> SOFTWARE ONLY
+      </div>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">INTERACTIVE CIRCUIT STUDY / 01</p>
+          <h1>See an error become a syndrome.</h1>
+          <p id="code">Rotated surface code · d=3 · Z memory · 3 rounds</p>
+        </div>
+        <div class="model-note">
+          9 data qubits<br />8 check ancillas<br />24 detector bits
+        </div>
+      </section>
+      <div class="toolbar">
+        <fieldset>
+          <legend>Inject Pauli</legend>
+          <div class="segmented">
+            <button data-pauli="X" aria-pressed="true">
+              X <small>bit</small></button
+            ><button data-pauli="Z" aria-pressed="false">
+              Z <small>phase</small></button
+            ><button data-pauli="Y" aria-pressed="false">
+              Y <small>both</small>
+            </button>
+          </div>
+        </fieldset>
+        <p>
+          Choose a Pauli, then click a data qubit.<br />Click again to remove
+          it. Multiple faults are allowed.
+        </p>
+        <div class="transport">
+          <button id="reset">Reset</button><button id="step">Next step →</button
+          ><button id="run" class="primary">Run correction</button>
+        </div>
+      </div>
+      <nav class="stages" aria-label="Simulation stage">
+        <button data-stage="0" aria-current="step"><span>01</span> Clean</button
+        ><button data-stage="1"><span>02</span> Inject error</button
+        ><button data-stage="2"><span>03</span> Detect</button
+        ><button data-stage="3"><span>04</span> Correct & verify</button>
+      </nav>
+      <div id="status" role="status" aria-live="polite">
+        Loading the Stim circuit…
+      </div>
+      <div class="workspace">
+        <section class="panel physical">
+          <div class="section-head">
+            <h2>Physical qubit layout</h2>
+            <span>STIM COORDINATES</span>
+          </div>
+          <div class="legend">
+            <span><i class="data-key"></i>Data</span
+            ><span><i class="x-key"></i>X check</span
+            ><span><i class="z-key"></i>Z check</span
+            ><span><i class="error-key"></i>Error</span
+            ><span><i class="fix-key"></i>Correction</span>
+          </div>
+          <div
+            id="lattice"
+            aria-label="Surface code physical qubit layout"
+          ></div>
+          <div class="lattice-caption">
+            <strong id="frame-label">Prepared reference</strong
+            ><span id="frame-detail">No injected errors.</span>
+          </div>
+          <p id="check-detail" class="check-detail">
+            Select a check ancilla to inspect its actual CX support.
+          </p>
+        </section>
+        <section class="panel detector-panel">
+          <div class="section-head">
+            <h2>Detector timeline</h2>
+            <span id="event-count">AWAITING EXTRACTION</span>
+          </div>
+          <p class="panel-note">
+            Bits are parity changes, not raw ancilla measurements. Columns use
+            Stim detector time coordinates.
+          </p>
+          <div id="timeline" aria-label="Detector bits by check and time"></div>
+          <div class="timeline-key">
+            <span><b>—</b> No detector defined</span
+            ><span><b>1</b> Detection event</span
+            ><span><b>1 → 0</b> Corrected replay</span>
+          </div>
+          <p class="timing-note">
+            Faults enter just after round 1 ancilla measurement, before round 2
+            gates. t=0 is the initial boundary; t=3 is the final
+            data-measurement boundary.
+          </p>
+        </section>
+      </div>
+      <section class="panel decoder-panel">
+        <div class="section-head">
+          <h2>Decoder & verification</h2>
+          <span>UNWEIGHTED UF / FOREST PEELING</span>
+        </div>
+        <div id="result" aria-live="polite">
+          <p>Step through extraction to see the decoder input.</p>
+        </div>
+        <details id="edge-details">
+          <summary>Inspect selected graph edges & circuit evidence</summary>
+          <div id="edges"></div>
+          <details>
+            <summary>Injected Stim circuit</summary>
+            <pre id="circuit"></pre>
+          </details>
+          <details>
+            <summary>Corrected replay circuit</summary>
+            <pre id="corrected-circuit"></pre>
+          </details>
+        </details>
+      </section>
+      <footer>
+        <strong>What “correction” means here</strong>
+        <p>
+          The decoder returns graph edges and a logical-Z flip prediction. The
+          qubit overlay is a minimum-weight Pauli representative with the same
+          detector signature and predicted observable, found from Stim-simulated
+          faults; it is not a gate-by-gate translation of those edges.
+          Verification replays that representative at the original fault
+          location. This is a counterfactual Pauli-frame demonstration, not
+          causal real-time feedback or board execution. A zero syndrome does not
+          guarantee logical success, and Z-memory success does not certify an
+          arbitrary quantum state.
+        </p>
+      </footer>
+    </main>
+    <noscript
+      >This lab requires JavaScript and the local Python server.</noscript
+    >
+  </body>
+</html>
