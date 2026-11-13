@@ -2,7 +2,7 @@
 
 A standalone QEC decoder project for the **Digilent Zybo Z7-10**
 (`xc7z010clg400-1`), with Stim-generated inputs, FPGA decoding, and host-side
-verification. This repository uses **`main`**; no tutorial checkout is required.
+verification. This repository uses **`main`**.
 
 ## Quick start: manually decode a complete window
 
@@ -30,12 +30,10 @@ flowchart TD
     M --> E
 ```
 
-**The circuit is simulated on the PC, not sent to the FPGA.** Only its detector
-bits go to the board. Stim is a circuit simulator, not the decoder used for the
-baseline: **PyMatching** decodes the same detector bits separately. The FPGA runs
-an unweighted union-find/peeling algorithm, so it can disagree with PyMatching
-without an implementation bug. For implementation correctness we compare the
-FPGA with the Python version of its own algorithm.
+The circuit is simulated on the PC, its detector bits go to the FPGA board. Stim is used as a circuit simulator,
+**PyMatching** decodes the same detector bits separately. The FPGA runs
+an unweighted union-find/peeling algorithm, so it can disagree with PyMatching.
+For implementation correctness we compare the FPGA with the Python version of its own algorithm.
 
 A detector bit records a measurement-parity change relative to the circuit's
 expected behavior. A complete set for one shot is the decoder input; bit i goes
@@ -45,13 +43,8 @@ The XOR of their logical-observable labels is the predicted logical flip.
 
 Stim supplies both the detector input and the true logical flip for evaluation.
 **The true flip is not sent to the FPGA.** A prediction of 1 means invert the
-logical measurement interpretation; it is not a command to physically flip a
-qubit. The sample does not connect to a quantum processor, execute physical
+logical measurement interpretation. The sample does not connect to a quantum processor, execute physical
 corrections, or run continuous feedback. It processes completed simulated shots.
-
-**Agent-selected starting point:** use the surface sample to see an algorithm
-run in hardware. The repetition sample instead indexes a 256-entry prediction
-LUT. Their firmware, bitstreams and packet formats are incompatible.
 
 ## 2. Prepare Python (no board needed)
 
@@ -63,14 +56,11 @@ mkdir -p build
 python -m pytest qec/tests -q
 ```
 
-If `qec/.venv` already exists, reuse it and skip creation. Python requirements
-include Stim, PyMatching, NumPy, pyserial and pytest. Vivado/Vitis are only needed
-for the later RTL/build/board steps.
+Python requirements include Stim, PyMatching, NumPy, pyserial and pytest.
 
 ## 3. Manually inspect one noisy shot in software
 
-The runnable example is already checked in as [qec/surface/example.py](qec/surface/example.py).
-No need to create a script or an intermediate JSON file:
+One runnable example is [qec/surface/example.py](qec/surface/example.py).
 
 ```sh
 python -m qec.surface.example
