@@ -116,6 +116,11 @@ label {
   font: 11px var(--mono);
   color: var(--muted);
 }
+#scenario {
+  width: 100%;
+  font: 11px var(--mono);
+  color: var(--muted);
+}
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -148,7 +153,7 @@ h2 {
   aspect-ratio: 1;
   max-width: 470px;
   margin: auto;
-  background: var(--dark);
+  background: #e9eee8;
   isolation: isolate;
 }
 #lattice svg {
@@ -159,7 +164,7 @@ h2 {
   pointer-events: none;
 }
 #lattice line {
-  stroke: #95c6c6;
+  stroke: #35799e;
   stroke-width: 4;
 }
 .qubit {
@@ -196,8 +201,20 @@ h2 {
   cursor: default;
 }
 .qubit.active {
-  outline: 2px solid #95c6c6;
-  outline-offset: 4px;
+  background: #adddf6;
+  color: #153c55;
+  border-color: #35799e;
+  outline: 2px solid #35799e;
+  outline-offset: 3px;
+}
+.qubit em {
+  position: absolute;
+  top: -18px;
+  font: 700 10px var(--mono);
+  color: #153c55;
+  background: #adddf6;
+  border-radius: 2px;
+  padding: 1px 4px;
 }
 .qubit.has-error {
   background: var(--amber);
@@ -244,6 +261,9 @@ h2 {
   display: inline-block;
   margin-right: 6px;
   border: 1px solid #566662;
+}
+.gate-key:before {
+  background: #adddf6;
 }
 .error-key:before {
   background: var(--amber);

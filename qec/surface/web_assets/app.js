@@ -32,8 +32,25 @@ const visibleDetectors = (detectors, indices, tick) =>
   indices.filter(
     (i) => detectors.find((d) => d.id === i).available_tick <= tick,
   );
+function validateLayout(data) {
+  if (!Array.isArray(data.ticks) || !data.ticks.length ||
+      !data.ticks.every((t) => Array.isArray(t.operations)) ||
+      !Array.isArray(data.data) || !Array.isArray(data.checks) ||
+      !Array.isArray(data.detectors) ||
+      !data.detectors.every((d) => Number.isInteger(d.available_tick))) {
+    throw Error("Incompatible replay API. Restart the QEC web server, then reload this page.");
+  }
+  return data;
+}
+function validateReplay(data, tickCount) {
+  if (!Array.isArray(data.detector_indices) || !Array.isArray(data.trace) ||
+      data.trace.length !== tickCount || !data.trace.every((t) => t.pauli_frame && typeof t.pauli_frame === "object")) {
+    throw Error("Incompatible replay API. Restart the QEC web server, then reload this page.");
+  }
+  return data;
+}
 if (typeof module !== "undefined")
-  module.exports = { LabState, visibleDetectors };
+  module.exports = { LabState, visibleDetectors, validateLayout, validateReplay };
 
 if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
@@ -91,7 +108,7 @@ if (typeof document !== "undefined") {
         faults: state.faults.map((f) => ({ ...f })),
       });
       if (id !== requestId) return;
-      result = data;
+      result = validateReplay(data, layout.ticks.length);
     } catch (e) {
       if (id !== requestId) return;
       failure = e.message;
@@ -124,9 +141,12 @@ if (typeof document !== "undefined") {
       : operations.map((op) => op.name).join(" · ");
     $("position").textContent = `${state.tick} / ${state.lastTick + 1}`;
     $("scrubber").value = state.tick;
+    $("scrubber").disabled = false;
     $("back").disabled = state.tick === 0;
     $("step").disabled = state.tick > state.lastTick;
     $("play").disabled = pending || !result;
+    $("example").disabled = false;
+    $("reset").disabled = false;
     $("source").textContent = failure
       ? `${layout.source} · unavailable`
       : result?.source || layout.source;
@@ -172,7 +192,8 @@ if (typeof document !== "undefined") {
           ? `Data qubit ${q.id}, ${fault || "I"}${fix ? ", host correction " + fix : ""}. Inject ${pauli} at tick ${$("fault-tick").value}`
           : `${q.basis} check ${q.id}${fired ? ", detector flip" : ""}`,
       );
-      button.innerHTML = `<span>${data ? "q" : q.basis}${q.id}</span><b>${corrected ? residual || (data ? "I" : "·") : fault || (fired ? "1" : "·")}</b>${fix ? `<small>+${fix}</small>` : ""}`;
+      const gates = corrected ? [] : operations.filter((op) => op.targets.includes(q.id)).map((op) => op.name);
+      button.innerHTML = `<span>${data ? "q" : q.basis}${q.id}</span><b>${corrected ? residual || (data ? "I" : "·") : fault || (fired ? "1" : "·")}</b>${gates.length ? `<em>${gates.join("/")}</em>` : ""}${fix ? `<small>+${fix}</small>` : ""}`;
       if (data) {
         const selected = state.faults.some(
           (f) => f.qubit === q.id && f.tick === Number($("fault-tick").value),
@@ -241,6 +262,9 @@ if (typeof document !== "undefined") {
           ? "success"
           : "failed"
         : "";
+    $("scenario").textContent = !state.faults.length
+      ? "No faults · click a data qubit to inject"
+      : `${state.faults.length === 1 && state.faults[0].tick === 8 && state.faults[0].qubit === 10 && state.faults[0].pauli === "X" ? "Example" : "Injected"} · ${state.faults.map((f) => `${f.pauli} on q${f.qubit} at tick ${f.tick}`).join(" · ")}`;
     $("technical").textContent = result
       ? JSON.stringify(
           {
@@ -297,7 +321,13 @@ if (typeof document !== "undefined") {
     }
     if (state.tick > state.lastTick) seek(0);
     $("play").textContent = "Pause";
-    timer = setTimeout(advance, 700 / Number($("speed").value));
+    advance();
+  };
+  $("example").onclick = () => {
+    state.reset();
+    state.toggle(10, "X", 8);
+    $("fault-tick").value = 8;
+    simulate();
   };
   $("reset").onclick = () => {
     state.reset();
@@ -326,13 +356,17 @@ if (typeof document !== "undefined") {
   });
   api("/api/layout")
     .then((data) => {
-      layout = data;
+      layout = validateLayout(data);
       state = new LabState(data.ticks.length - 1);
+      state.toggle(10, "X", 8);
+      $("fault-tick").value = 8;
       $("scrubber").max = state.lastTick + 1;
       $("fault-tick").max = state.lastTick;
       simulate();
     })
     .catch((e) => {
+      $("source").textContent = "Unavailable";
+      $("status").className = "failed";
       $("status").textContent = e.message;
     });
 }

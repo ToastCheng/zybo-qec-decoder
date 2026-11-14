@@ -10,7 +10,7 @@
   <body>
     <header>
       <h1>QEC <span>/ Replay</span></h1>
-      <span id="source">Simulated</span>
+      <span id="source">Connecting…</span>
     </header>
     <main>
       <div class="toolbar">
@@ -24,9 +24,29 @@
           >Fault tick
           <input id="fault-tick" type="number" min="0" max="21" value="0"
         /></label>
-        <button id="reset">Clear faults</button>
+        <button id="example" disabled>Example fault</button>
+        <button id="reset" disabled>Clear faults</button>
         <span class="code">d3 · Z · 3 rounds</span>
+        <span id="scenario">Example · X on q10 at tick 8</span>
       </div>
+      <div class="replay">
+        <div class="transport">
+          <button id="back" aria-label="Previous tick" disabled>←</button>
+          <button id="play" disabled>Play</button>
+          <button id="step" aria-label="Next tick" disabled>→</button>
+          <label>Speed
+            <select id="speed">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+          </label>
+          <output id="position">0 / 22</output>
+        </div>
+        <input id="scrubber" type="range" min="0" max="22" value="0" step="1" aria-label="Circuit tick" disabled />
+      </div>
+      <div id="status" role="status" aria-live="polite">Loading…</div>
       <div class="workspace">
         <section class="physical" aria-label="Circuit replay">
           <div class="section-head">
@@ -35,7 +55,8 @@
           </div>
           <div id="lattice" aria-label="Surface code qubits"></div>
           <div class="legend">
-            <span class="error-key">Error</span
+            <span class="gate-key">Active gate</span
+            ><span class="error-key">Error</span
             ><span class="detector-key">Detector flip</span
             ><span class="fix-key">Host correction</span>
           </div>
@@ -52,32 +73,7 @@
           <div id="result" aria-live="polite"></div>
         </section>
       </div>
-      <div class="replay">
-        <div class="transport">
-          <button id="back" aria-label="Previous tick">←</button
-          ><button id="play">Play</button
-          ><button id="step" aria-label="Next tick">→</button
-          ><label
-            >Speed
-            <select id="speed">
-              <option value="0.5">0.5×</option>
-              <option value="1" selected>1×</option>
-              <option value="2">2×</option>
-              <option value="4">4×</option>
-            </select></label
-          ><output id="position">0 / 22</output>
-        </div>
-        <input
-          id="scrubber"
-          type="range"
-          min="0"
-          max="22"
-          value="0"
-          step="1"
-          aria-label="Circuit tick"
-        />
-      </div>
-      <div id="status" role="status" aria-live="polite">Loading…</div>
+
       <details id="evidence">
         <summary>Details</summary>
         <p>
