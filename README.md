@@ -36,38 +36,31 @@ directory if it is outside Vivado's board search paths.
 Connect the powered board through its PROG/UART USB port and grant your account
 serial-device access.
 
-## Interactive software lab (no board required)
+## Interactive circuit replay (no board required)
 
-After the Python setup above, launch the local web interface from the repository root:
+After the Python setup above, launch from the repository root:
 
 ```sh
 python -m qec.surface.web --port 8765
 ```
 
-Open **http://127.0.0.1:8765/**. No Vivado, serial connection, frontend build, or
-additional Python dependencies are needed. The server binds only to loopback;
-stop it with Ctrl+C.
+Open **http://127.0.0.1:8765/**. Scrub any circuit tick, step backward/forward,
+or play at an adjustable speed. Select a fault tick and X, Y, or Z, then click
+data qubits. Multiple fault times are supported. Detector flips appear only
+at their measurement boundaries; the final step shows the **Host correction**
+overlay. **Details** contains the actual Stim circuits and decoder evidence.
 
-Choose X, Z, or Y and click one or more data qubits, then use **Next step** or
-**Run correction** to follow clean → error → detector bits → correction.
-Select a check ancilla to see its CX-derived data support. The timeline shows
-all 24 detectors at their actual Stim coordinates, including the initial and
-final boundaries. The inspector exposes the existing union-find decoder's
-selected graph edges, logical prediction, and complete replay circuits.
+To use an already loaded **d3 Z / 3-round surface decoder**, add
+`--serial-port /dev/ttyUSB1` (use your actual UART path). The source is explicitly
+**Simulated** or **FPGA**; port/protocol failures are shown without software
+fallback. This command does not program or reset the board. FPGA replies supply
+logical prediction and measured cycles, not physical gates or graph edges.
+The returned prediction updates the host logical frame; the Pauli overlay and
+independent counterfactual replay remain host-derived, not live quantum feedback.
+A cleared syndrome alone does not establish logical recovery.
 
-Faults are deterministic Pauli injections immediately after the first ancilla
-measurement/reset, before round 2 gates, in an otherwise noiseless d3 Z-memory
-circuit. Decoding uses the committed circuit-noise graph and unweighted UF
-schedule. The displayed physical correction is a minimum-weight Pauli
-representative of the decoder's detector signature and predicted Z observable,
-computed from Stim-simulated single-fault effects; graph edges are **not** unique
-physical gates. The verification circuit replays this representative at the
-original injection point, not as causal feedback after detection. A zero
-residual syndrome does **not** guarantee logical success; the independent
-Z-observable comparison is shown explicitly. This is a completed-shot,
-software-only teaching lab, not arbitrary-state recovery or board execution.
-
-Regression checks (Node.js is needed only for the browser-state tests):
+The server binds only to loopback; stop it with Ctrl+C. No frontend build is
+needed. Regression checks (Node.js is needed only for browser-state tests):
 
 ```sh
 python -m pytest qec/tests/test_web.py -q

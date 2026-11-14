@@ -1,50 +1,50 @@
 "use strict";
 class LabState {
-  constructor() {
+  constructor(lastTick = 21) {
+    this.lastTick = lastTick;
     this.reset();
   }
   reset() {
-    this.errors = {};
-    this.stage = 0;
+    this.faults = [];
+    this.tick = 0;
   }
-  toggle(id, pauli) {
-    if (this.errors[id] === pauli) delete this.errors[id];
-    else this.errors[id] = pauli;
-    this.stage = 1;
+  seek(tick) {
+    this.tick = Math.max(0, Math.min(this.lastTick + 1, Math.round(tick)));
   }
   next() {
-    this.stage = Math.min(3, this.stage + 1);
+    this.seek(this.tick + 1);
+  }
+  previous() {
+    this.seek(this.tick - 1);
+  }
+  toggle(qubit, pauli, tick = Math.min(this.tick, this.lastTick)) {
+    const i = this.faults.findIndex(
+      (f) => f.tick === tick && f.qubit === qubit,
+    );
+    if (i >= 0) {
+      const old = this.faults.splice(i, 1)[0];
+      if (old.pauli === pauli) return;
+    }
+    this.faults.push({ tick, qubit, pauli });
   }
 }
-if (typeof module !== "undefined") module.exports = { LabState };
+const visibleDetectors = (detectors, indices, tick) =>
+  indices.filter(
+    (i) => detectors.find((d) => d.id === i).available_tick <= tick,
+  );
+if (typeof module !== "undefined")
+  module.exports = { LabState, visibleDetectors };
 
 if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
-  const state = new LabState();
   let layout,
+    state,
     result,
-    pauli = "X",
-    selectedCheck = null,
+    pending = false,
+    failure = "",
     requestId = 0,
-    pending = false;
-  const phases = [
-    "Clean reference",
-    "Errors injected",
-    "Detection events extracted",
-    "Correction replay verified",
-  ];
-  const frameText = (frame) =>
-    Object.entries(frame || {})
-      .map(([q, p]) => `${p} q${q}`)
-      .join(" · ") || "Identity (no Pauli)";
-  const combine = (a, b) => {
-    if (!a) return b || "";
-    if (!b) return a;
-    return a === b ? "" : "XYZ".replace(a, "").replace(b, "");
-  };
-  const coords = (q) =>
-    `${((q.coords[0] + 0.6) / 7.2) * 100}%, ${((q.coords[1] + 0.6) / 7.2) * 100}%`;
-
+    timer = null,
+    pauli = "X";
   async function api(path, body) {
     const response = await fetch(
       path,
@@ -60,264 +60,279 @@ if (typeof document !== "undefined") {
     if (!response.ok) throw Error(data.error || `HTTP ${response.status}`);
     return data;
   }
+  function stop() {
+    clearTimeout(timer);
+    timer = null;
+    $("play").textContent = "Play";
+  }
+  function seek(tick) {
+    state.seek(tick);
+    $("fault-tick").value = Math.min(state.tick, state.lastTick);
+    render();
+  }
+  function advance() {
+    state.next();
+    render();
+    if (state.tick > state.lastTick) {
+      stop();
+      return;
+    }
+    timer = setTimeout(advance, 700 / Number($("speed").value));
+  }
   async function simulate() {
+    stop();
     const id = ++requestId;
     pending = true;
     result = null;
+    failure = "";
     render();
     try {
-      const data = await api("/api/simulate", { errors: { ...state.errors } });
+      const data = await api("/api/simulate", {
+        faults: state.faults.map((f) => ({ ...f })),
+      });
       if (id !== requestId) return;
       result = data;
-      pending = false;
-      render();
-    } catch (error) {
+    } catch (e) {
       if (id !== requestId) return;
-      pending = false;
-      $("status").textContent =
-        `Simulation unavailable: ${error.message}. Change a qubit or Reset to retry.`;
-      $("status").className = "failed";
-      $("step").disabled = $("run").disabled = true;
+      failure = e.message;
     }
+    pending = false;
+    render();
   }
-  function drawLattice() {
-    const lattice = $("lattice");
-    const links = layout.checks
-      .filter((c) => selectedCheck === null || c.id === selectedCheck)
-      .flatMap((c) =>
-        c.support.map((id) => {
-          const q = layout.data.find((q) => q.id === id);
-          return `<line x1="${(c.coords[0] + 0.6) * 100}" y1="${(c.coords[1] + 0.6) * 100}" x2="${(q.coords[0] + 0.6) * 100}" y2="${(q.coords[1] + 0.6) * 100}" class="${selectedCheck === null ? "" : "selected-link"}"/>`;
-        }),
-      );
-    lattice.innerHTML = `<svg viewBox="0 0 720 720" aria-hidden="true">${links.join("")}</svg>`;
-    for (const q of layout.data) {
-      const fault = state.stage >= 1 ? state.errors[q.id] : "";
-      const fix =
-        state.stage === 3 && result ? (result.correction || {})[q.id] : "";
+  const position = (q) => ({
+    x: (q.coords[0] + 0.6) * 100,
+    y: (q.coords[1] + 0.6) * 100,
+  });
+  const combine = (a, b) =>
+    !a ? b || "" : !b ? a : a === b ? "" : "XYZ".replace(a, "").replace(b, "");
+  function render() {
+    if (!layout) return;
+    const focused = document.activeElement?.dataset.qubit;
+    const corrected = state.tick > state.lastTick;
+    const tick = Math.min(state.tick, state.lastTick);
+    const operations = layout.ticks[tick].operations;
+    const visible = result
+      ? visibleDetectors(layout.detectors, result.detector_indices, tick)
+      : [];
+    const frame = result?.trace[tick].pauli_frame || {};
+    const fixes = corrected ? result?.correction_frame || {} : {};
+    $("tick-label").textContent = corrected
+      ? "Host correction"
+      : `Tick ${tick}`;
+    $("operations").textContent = corrected
+      ? "Pauli frame"
+      : operations.map((op) => op.name).join(" · ");
+    $("position").textContent = `${state.tick} / ${state.lastTick + 1}`;
+    $("scrubber").value = state.tick;
+    $("back").disabled = state.tick === 0;
+    $("step").disabled = state.tick > state.lastTick;
+    $("play").disabled = pending || !result;
+    $("source").textContent = failure
+      ? `${layout.source} · unavailable`
+      : result?.source || layout.source;
+    $("status").className = failure ? "failed" : "";
+    $("status").textContent = failure || (pending ? "Decoding…" : "");
+    const active = new Set(operations.flatMap((op) => op.targets));
+    const byId = new Map(
+      [...layout.data, ...layout.checks].map((q) => [q.id, q]),
+    );
+    const links = operations
+      .filter((op) => op.name === "CX")
+      .flatMap((op) => {
+        const links = [];
+        for (let i = 0; i < op.targets.length; i += 2) {
+          const a = position(byId.get(op.targets[i])),
+            b = position(byId.get(op.targets[i + 1]));
+          links.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`);
+        }
+        return links;
+      });
+    $("lattice").innerHTML =
+      `<svg viewBox="0 0 720 720" aria-hidden="true">${corrected ? "" : links.join("")}</svg>`;
+    for (const q of [...layout.data, ...layout.checks]) {
+      const data = !q.basis;
+      const button = document.createElement("button");
+      const fault = frame[q.id] || "",
+        fix = fixes[q.id] || "";
       const residual = combine(fault, fix);
-      const button = document.createElement("button");
-      button.className = `qubit data-qubit ${fault ? "has-error" : ""} ${fix ? "has-fix" : ""} ${state.stage === 3 && residual ? "residual" : ""}`;
+      const fired = layout.detectors.some(
+        (d) =>
+          d.coords[0] === q.coords[0] &&
+          d.coords[1] === q.coords[1] &&
+          visible.includes(d.id),
+      );
+      button.className = `qubit ${data ? "data-qubit" : "check-qubit"} ${!corrected && active.has(q.id) ? "active" : ""} ${fault ? "has-error" : ""} ${fired ? "check-fired" : ""} ${fix ? "has-fix" : ""} ${corrected && residual ? "residual" : ""}`;
       button.dataset.qubit = q.id;
-      const [left, top] = coords(q).split(", ");
-      button.style.left = left;
-      button.style.top = top;
+      const pos = position(q);
+      button.style.left = `${pos.x / 7.2}%`;
+      button.style.top = `${pos.y / 7.2}%`;
       button.setAttribute(
         "aria-label",
-        `Data qubit ${q.id}, coordinates ${q.coords.join(", ")}, injected ${state.errors[q.id] || "none"}${fix ? ", correction " + fix : ""}. Toggle ${pauli}`,
+        data
+          ? `Data qubit ${q.id}, ${fault || "I"}${fix ? ", host correction " + fix : ""}. Inject ${pauli} at tick ${$("fault-tick").value}`
+          : `${q.basis} check ${q.id}${fired ? ", detector flip" : ""}`,
       );
-      button.setAttribute("aria-pressed", String(Boolean(state.errors[q.id])));
-      button.innerHTML = `<span>q${q.id}</span><b>${state.stage === 3 ? residual || "I" : fault || "·"}</b>${fix ? `<small class="fix-label">+${fix}</small>` : ""}`;
-      button.onclick = () => {
-        state.toggle(String(q.id), pauli);
-        simulate();
-      };
-      lattice.append(button);
-    }
-    for (const c of layout.checks) {
-      const button = document.createElement("button");
-      button.className = `qubit check-qubit ${c.basis.toLowerCase()}-check ${selectedCheck === c.id ? "selected-check" : ""}`;
-      button.dataset.check = c.id;
-      const [left, top] = coords(c).split(", ");
-      button.style.left = left;
-      button.style.top = top;
-      const fires =
-        state.stage >= 2 &&
-        result &&
-        layout.detectors.some(
-          (d) =>
-            d.coords[0] === c.coords[0] &&
-            d.coords[1] === c.coords[1] &&
-            result.detector_indices.includes(d.id),
+      button.innerHTML = `<span>${data ? "q" : q.basis}${q.id}</span><b>${corrected ? residual || (data ? "I" : "·") : fault || (fired ? "1" : "·")}</b>${fix ? `<small>+${fix}</small>` : ""}`;
+      if (data) {
+        const selected = state.faults.some(
+          (f) => f.qubit === q.id && f.tick === Number($("fault-tick").value),
         );
-      if (fires)
-        button.classList.add(
-          state.stage === 3 ? "check-corrected" : "check-fired",
-        );
-      button.setAttribute(
-        "aria-label",
-        `${c.basis} check ancilla ${c.id}; support ${c.support.join(", ")}`,
-      );
-      button.setAttribute("aria-pressed", String(selectedCheck === c.id));
-      button.innerHTML = `<b>${c.basis}</b><span>a${c.id}</span>`;
-      button.onclick = () => {
-        selectedCheck = selectedCheck === c.id ? null : c.id;
-        render();
-      };
-      lattice.append(button);
+        button.setAttribute("aria-pressed", String(selected));
+        button.onclick = () => {
+          const faultTick = Number($("fault-tick").value);
+          if (
+            !Number.isInteger(faultTick) ||
+            faultTick < 0 ||
+            faultTick > state.lastTick
+          ) {
+            failure = "Choose a valid fault tick";
+            render();
+            return;
+          }
+          state.toggle(q.id, pauli, faultTick);
+          simulate();
+        };
+      } else {
+        button.tabIndex = -1;
+        button.setAttribute("aria-disabled", "true");
+      }
+      $("lattice").append(button);
     }
-    const c = layout.checks.find((c) => c.id === selectedCheck);
-    $("check-detail").textContent = c
-      ? `${c.basis} check a${c.id} at (${c.coords.join(", ")}): ${c.basis} on ${c.support.map((q) => "q" + q).join(", ")}.`
-      : "Select a check ancilla to inspect its actual CX support.";
-    $("frame-label").textContent = [
-      "Prepared reference",
-      "Injected Pauli frame",
-      "Error frame / before correction",
-      "Representative correction overlay",
-    ][state.stage];
-    $("frame-detail").textContent =
-      state.stage === 0
-        ? "No injected errors in this view."
-        : state.stage === 3 && result
-          ? `Apply: ${frameText(result.correction)}. I = locally canceled.`
-          : frameText(state.errors);
-  }
-  function drawTimeline() {
+    if (focused)
+      document
+        .querySelector(`[data-qubit="${focused}"]`)
+        ?.focus({ preventScroll: true });
     let html =
-      '<div class="timeline-corner">CHECK / TIME</div>' +
-      [0, 1, 2, 3].map((t) => `<div class="time-header">t=${t}</div>`).join("");
-    for (const c of layout.checks) {
-      html += `<div class="check-row">${c.basis} <span>a${c.id}</span></div>`;
+      "<span></span>" +
+      [0, 1, 2, 3]
+        .map((t) => `<span class="time-header">r${t}</span>`)
+        .join("");
+    for (const check of layout.checks) {
+      html += `<span class="check-row">${check.basis}${check.id}</span>`;
       for (let t = 0; t < 4; t++) {
         const d = layout.detectors.find(
           (d) =>
-            d.coords[0] === c.coords[0] &&
-            d.coords[1] === c.coords[1] &&
+            d.coords[0] === check.coords[0] &&
+            d.coords[1] === check.coords[1] &&
             d.coords[2] === t,
         );
         if (!d) {
-          html +=
-            '<div class="no-detector" aria-label="No detector defined">—</div>';
+          html += '<span class="no-detector">—</span>';
           continue;
         }
-        const shown = state.stage >= 2 && result;
-        const bit = shown
-          ? Number(result.detector_indices.includes(d.id))
-          : null;
-        const after =
-          state.stage === 3 && result && result.residual_syndrome !== null
+        const available = result && d.available_tick <= tick;
+        const bit = available ? Number(visible.includes(d.id)) : null;
+        const replay =
+          corrected && result?.residual_syndrome !== null
             ? (result.residual_syndrome >> d.id) & 1
             : null;
-        html += `<div class="detector ${bit ? (after === 0 ? "cleared" : "fired") : ""}" data-detector="${d.id}" title="D${d.id}, (${d.coords.join(", ")}): ${bit === null ? "not extracted" : bit}${after === null ? "" : ", replay " + after}"><small>D${d.id}</small><b>${bit === null ? "·" : after !== null && bit ? `${bit} → ${after}` : bit}</b></div>`;
+        html += `<div data-detector="${d.id}" data-available="${Boolean(available)}" class="detector ${bit ? "fired" : ""} ${bit && replay === 0 ? "cleared" : ""}" title="D${d.id} · tick ${d.available_tick}"><small>D${d.id}</small><b>${bit === null ? "·" : bit && replay !== null ? `${bit}→${replay}` : bit}</b></div>`;
       }
     }
     $("timeline").innerHTML = html;
-    $("event-count").textContent =
-      state.stage >= 2 && result
-        ? `${result.detector_indices.length} ORIGINAL EVENTS${state.stage === 3 ? " / REPLAY BELOW" : ""}`
-        : "AWAITING EXTRACTION";
-  }
-  function drawResult() {
-    if (!result || state.stage < 2) {
-      $("result").innerHTML =
-        '<p class="waiting">' +
-        (pending
-          ? "Computing the circuit with Stim…"
-          : "Step through extraction to see the decoder input.") +
-        "</p>";
-      $("edge-details").hidden = true;
-      return;
-    }
-    const corrected = state.stage === 3;
-    const cells = [
-      ["Input syndrome", "0x" + result.syndrome.toString(16).padStart(6, "0")],
-      ["True Z flip", result.observable],
-      ["UF prediction", corrected ? result.prediction : "—"],
-      ["Graph residual", corrected ? result.graph_residual : "—"],
-      [
-        "Replay syndrome",
-        corrected ? (result.residual_syndrome ?? "unavailable") : "—",
-      ],
-      [
-        "Replay Z flip",
-        corrected ? (result.residual_observable ?? "unavailable") : "—",
-      ],
-    ];
-    $("result").innerHTML =
-      `<div class="metrics">${cells.map(([k, v]) => `<div><span>${k}</span><strong>${v}</strong></div>`).join("")}</div>` +
-      (corrected
-        ? `<div id="logical-outcome" class="outcome ${result.logical_success ? "success" : "failure"}"><strong>${result.error ? "Decoder reported an error" : result.logical_success ? "Logical Z preserved" : "Logical failure — Z observable flipped"}</strong><span>${result.logical_success ? "Prediction matches the simulated observable." : "A cleared syndrome is not proof of recovery."} ${result.correction === null ? "No same-location representative is available." : "The physical overlay is an equivalent representative, not unique edge-to-gate recovery."}</span></div>`
-        : '<p class="waiting">Detection events are ready. Next: decode and replay a correction.</p>');
-    $("edge-details").hidden = !corrected;
-    $("edges").innerHTML =
-      '<p>Selected correction edges from the existing serial UF decoder. B denotes the graph boundary. L is the logical-Z observable label.</p><div class="edge-list">' +
-      (result.correction_edges.length
-        ? result.correction_edges
-            .map((i) => {
-              const [a, b, l] = layout.edges[i];
-              return `<span class="edge">e${i}: D${a} ↔ ${b === 24 ? "B" : "D" + b} / L${l}</span>`;
-            })
-            .join("")
-        : "<span>No selected edges (identity correction).</span>") +
-      "</div>";
-    $("circuit").textContent = result.injected_circuit;
-    $("corrected-circuit").textContent =
-      result.corrected_circuit ||
-      "No representative at this injection location.";
-  }
-  function render() {
-    if (!layout) return;
-    const focus = document.activeElement?.dataset;
-    const focusedQubit = focus?.qubit,
-      focusedCheck = focus?.check;
-    drawLattice();
-    drawTimeline();
-    drawResult();
-    document.querySelectorAll("[data-stage]").forEach((b) => {
-      const current = Number(b.dataset.stage) === state.stage;
-      if (current) b.setAttribute("aria-current", "step");
-      else b.removeAttribute("aria-current");
-    });
-    $("step").disabled = pending || !result || state.stage === 3;
-    $("run").disabled = pending || !result;
-    $("status").className = "";
-    $("status").textContent = pending
-      ? "Computing real Stim detector effects…"
-      : phases[state.stage] +
-        (state.stage === 3
-          ? " · counterfactual replay, not live feedback"
-          : "");
-    if (focusedQubit)
-      document
-        .querySelector(`[data-qubit="${focusedQubit}"]`)
-        ?.focus({ preventScroll: true });
-    if (focusedCheck)
-      document
-        .querySelector(`[data-check="${focusedCheck}"]`)
-        ?.focus({ preventScroll: true });
+    $("event-count").textContent = `${visible.length} flips`;
+    $("result").textContent =
+      corrected && result
+        ? `${result.logical_success ? "Z preserved" : "Logical failure"} · frame ${result.host_frame}${result.correction === null ? " · no representative" : ""}`
+        : "";
+    $("result").className =
+      corrected && result
+        ? result.logical_success
+          ? "success"
+          : "failed"
+        : "";
+    $("technical").textContent = result
+      ? JSON.stringify(
+          {
+            source: result.source,
+            hardware: result.hardware,
+            reference_prediction: result.reference_prediction,
+            syndrome: result.syndrome,
+            observable: result.observable,
+            prediction: result.prediction,
+            host_frame: result.host_frame,
+            edges_source: "Host reference",
+            correction_edges: result.correction_edges,
+            correction: result.correction,
+            residual_syndrome: result.residual_syndrome,
+            residual_observable: result.residual_observable,
+            faults: state.faults,
+          },
+          null,
+          2,
+        )
+      : "";
+    $("circuit").textContent = result?.injected_circuit || "";
+    $("corrected-circuit").textContent = result?.corrected_circuit || "";
   }
   document.querySelectorAll("[data-pauli]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        pauli = button.dataset.pauli;
+    (b) =>
+      (b.onclick = () => {
+        pauli = b.dataset.pauli;
         document
           .querySelectorAll("[data-pauli]")
-          .forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+          .forEach((other) =>
+            other.setAttribute("aria-pressed", String(other === b)),
+          );
         render();
       }),
   );
-  document.querySelectorAll("[data-stage]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        if (pending || !result) return;
-        state.stage = Number(button.dataset.stage);
-        render();
-      }),
-  );
-  $("step").onclick = () => {
-    state.next();
-    render();
+  $("back").onclick = () => {
+    stop();
+    seek(state.tick - 1);
   };
-  $("run").onclick = () => {
-    state.stage = 3;
-    render();
+  $("step").onclick = () => {
+    stop();
+    seek(state.tick + 1);
+  };
+  $("scrubber").oninput = () => {
+    stop();
+    seek(Number($("scrubber").value));
+  };
+  $("fault-tick").oninput = () => render();
+  $("play").onclick = () => {
+    if (timer) {
+      stop();
+      return;
+    }
+    if (state.tick > state.lastTick) seek(0);
+    $("play").textContent = "Pause";
+    timer = setTimeout(advance, 700 / Number($("speed").value));
   };
   $("reset").onclick = () => {
     state.reset();
-    selectedCheck = null;
+    $("fault-tick").value = 0;
     simulate();
   };
+  document.addEventListener("keydown", (e) => {
+    if (
+      e.ctrlKey ||
+      e.metaKey ||
+      e.altKey ||
+      (e.target instanceof Element &&
+        e.target.closest("input,select,textarea,button,summary"))
+    )
+      return;
+    if (!state) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      stop();
+      seek(state.tick + (e.key === "ArrowLeft" ? -1 : 1));
+    }
+    if (e.key === " ") {
+      e.preventDefault();
+      $("play").click();
+    }
+  });
   api("/api/layout")
     .then((data) => {
       layout = data;
-      $("code").textContent = data.code;
+      state = new LabState(data.ticks.length - 1);
+      $("scrubber").max = state.lastTick + 1;
+      $("fault-tick").max = state.lastTick;
       simulate();
     })
-    .catch((error) => {
-      $("status").textContent =
-        `Could not load lab: ${error.message}. Check the local server and reload.`;
-      $("status").className = "failed";
-      $("step").disabled = $("run").disabled = true;
+    .catch((e) => {
+      $("status").textContent = e.message;
     });
 }

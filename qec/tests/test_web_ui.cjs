@@ -4,32 +4,46 @@ const fs = require("node:fs");
 const path = require("node:path");
 const app = path.join(__dirname, "../surface/web_assets/app.js");
 
-test("lab state transitions preserve injected Paulis and reset completely", () => {
-  assert.ok(fs.existsSync(app), "browser application is missing");
+test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults", () => {
   const { LabState } = require(app);
-  const s = new LabState();
-  assert.equal(s.stage, 0);
-  s.toggle("10", "X");
-  assert.equal(s.stage, 1);
-  assert.deepEqual(s.errors, { 10: "X" });
+  const s = new LabState(21);
+  assert.equal(s.tick, 0);
+  s.seek(8);
+  s.toggle(10, "X");
+  s.seek(16);
+  s.toggle(10, "Z");
+  assert.deepEqual(s.faults, [
+    { tick: 8, qubit: 10, pauli: "X" },
+    { tick: 16, qubit: 10, pauli: "Z" },
+  ]);
+  s.previous();
+  assert.equal(s.tick, 15);
   s.next();
-  assert.equal(s.stage, 2);
-  s.next();
-  assert.equal(s.stage, 3);
-  s.next();
-  assert.equal(s.stage, 3);
-  s.toggle("10", "Z");
-  assert.equal(s.stage, 1);
-  assert.deepEqual(s.errors, { 10: "Z" });
-  s.toggle("10", "Z");
-  assert.deepEqual(s.errors, {});
-  s.toggle("1", "Y");
+  assert.equal(s.tick, 16);
+  s.seek(100);
+  assert.equal(s.tick, 22);
+  s.seek(-1);
+  assert.equal(s.tick, 0);
+  s.seek(8);
+  s.toggle(10, "X");
+  assert.deepEqual(s.faults, [{ tick: 16, qubit: 10, pauli: "Z" }]);
   s.reset();
-  assert.equal(s.stage, 0);
-  assert.deepEqual(s.errors, {});
+  assert.equal(s.tick, 0);
+  assert.deepEqual(s.faults, []);
 });
 
-test("page exposes semantic controls and local assets", () => {
+test("detectors stay unavailable before their measurement boundary, including backward scrub", () => {
+  const { visibleDetectors } = require(app);
+  const ds = [
+    { id: 0, available_tick: 7 },
+    { id: 1, available_tick: 14 },
+  ];
+  assert.deepEqual(visibleDetectors(ds, [0, 1], 6), []);
+  assert.deepEqual(visibleDetectors(ds, [0, 1], 14), [0, 1]);
+  assert.deepEqual(visibleDetectors(ds, [0, 1], 8), [0]);
+});
+
+test("minimal page exposes replay, fault time, speed and collapsed evidence", () => {
   const html = fs.readFileSync(
     path.join(path.dirname(app), "index.html"),
     "utf8",
@@ -37,15 +51,23 @@ test("page exposes semantic controls and local assets", () => {
   for (const id of [
     "lattice",
     "timeline",
+    "scrubber",
+    "back",
     "step",
-    "run",
+    "play",
+    "speed",
+    "fault-tick",
     "reset",
     "result",
     "status",
+    "source",
+    "evidence",
   ]) {
     assert.ok(html.includes(`id="${id}"`), id);
   }
+  assert.ok(html.includes('type="range"'));
   assert.ok(html.includes('aria-live="polite"'));
-  assert.ok(html.includes("app.js"));
-  assert.ok(html.includes("style.css"));
+  assert.ok(!html.includes("See an error become"));
+  assert.ok(!html.includes("<footer>"));
+  assert.ok(html.includes("Host correction"));
 });
