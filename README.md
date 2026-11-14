@@ -239,3 +239,31 @@ The board run adds:
 The example regenerates the shot from section 2 and sends its detector bits to
 the loaded surface decoder. It prints the reply, checks the prediction against
 the Python reference and checks that the cycle count is positive.
+
+## Restricted logical compiler
+
+The separate [compiler CLI](qec/surface/compile.py) supports only one-qubit
+memory, a single temporal H, or a single lattice-surgery CX, in X/Z basis at
+code distance 3 or 5. It explicitly rejects S, T, adaptive controls and all
+unvalidated compositions; this is **not arbitrary Clifford compilation**.
+
+Install its pinned optional dependency in a separate Python 3.12 environment:
+
+```sh
+uv venv --python 3.12 build/compiler-env
+uv pip install --python build/compiler-env/bin/python -r qec/requirements-compiler.txt
+source build/compiler-env/bin/activate
+python -m qec.surface.compile qec/examples/logical_h.json --basis z --distance 3 --noise 0.001 --shots 256 --seed 123 --out build/logical-h
+```
+
+This verified H run produced 56 detectors, 208 edges and one observable;
+UF/MWPM logical failures were 3/0 on the same 256 sampled shots, with zero
+residual syndromes. The new output directory contains annotated Stim circuits,
+DEMs, a loss-checked graph, per-shot evidence, a hash/version manifest and a
+single-observable core ROM. CX preserves both observable bits in software/JSON
+and emits no one-bit ROM. See the [input and artifact contract](qec/examples/README.md)
+for all three example inputs, zero-noise reference handling and reproduction.
+
+The compiler rejects `--port` before opening serial: H requires a matching
+bitstream and firmware; CX also needs wider RTL/protocol support. It does not
+program or reset the board. The existing `qec.surface.example` remains unchanged.
