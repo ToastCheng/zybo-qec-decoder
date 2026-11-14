@@ -99,21 +99,20 @@ flowchart TD
     M --> E
 ```
 
-The circuit is simulated on the PC, its detector bits go to the FPGA board. Stim is used as a circuit simulator,
-**PyMatching** decodes the same detector bits separately. The FPGA runs
-an unweighted union-find/peeling algorithm, so it can disagree with PyMatching.
-For implementation correctness we compare the FPGA with the Python version of its own algorithm.
+The circuit is simulated on the PC, its detector bits go to the FPGA board.
+Stim is used as a circuit simulator, **PyMatching** decodes the same detector
+bits separately. The FPGA runs an unweighted union-find/peeling algorithm, so
+it can disagree with PyMatching. For implementation correctness we compare the
+FPGA with the Python version of its own algorithm.
 
 A detector bit records a measurement-parity change relative to the circuit's
-expected behavior. A complete set for one shot is the decoder input; bit i goes
-in integer bit i (little-endian packing). The decoder groups detection events
-using the graph, then selects correction edges by peeling a spanning forest.
-The XOR of their logical-observable labels is the predicted logical flip.
+expected behavior. A complete set for one shot is the decoder input.
 
 Stim supplies both the detector input and the true logical flip for evaluation.
 **The true flip is not sent to the FPGA.** A prediction of 1 means invert the
-logical measurement interpretation. The sample does not connect to a quantum processor, execute physical
-corrections, or run continuous feedback. It processes completed simulated shots.
+logical measurement interpretation. The sample does not connect to a quantum
+processor, execute physical corrections, or run continuous feedback. It processes
+completed simulated shots.
 
 ## 2. Run the software example
 
