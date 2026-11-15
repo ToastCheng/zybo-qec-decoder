@@ -23,6 +23,207 @@ class Lab:
             "surface_code:rotated_memory_z", distance=3, rounds=3
         ).flattened()
 
+    def run(self, settings):
+        """Sample one noisy shot and freeze actual noise operations for exact counterfactual replay."""
+        if not isinstance(settings, dict) or set(settings) != {
+            "circuit",
+            "distance",
+            "rounds",
+            "noise",
+            "seed",
+            "faults",
+        }:
+            raise ValueError(
+                "Expected circuit, distance, rounds, noise, seed and faults"
+            )
+        if (
+            settings["circuit"] != "surface_code:rotated_memory_z"
+            or type(settings["distance"]) is not int
+            or settings["distance"] != 3
+            or type(settings["rounds"]) is not int
+            or settings["rounds"] != 3
+        ):
+            raise ValueError(
+                "Loaded graph supports only surface_code:rotated_memory_z, distance=3, rounds=3"
+            )
+        if type(settings["seed"]) is not int or not 0 <= settings["seed"] <= 2**53 - 1:
+            raise ValueError("seed must be an unsigned safe integer (0..2^53-1)")
+        noise = settings["noise"]
+        if not isinstance(noise, dict) or set(noise) != {
+            "after_clifford_depolarization",
+            "before_round_data_depolarization",
+            "before_measure_flip_probability",
+            "after_reset_flip_probability",
+        }:
+            raise ValueError(
+                "noise must contain exactly the four supported Stim noise rates"
+            )
+        if any(
+            type(p) not in (int, float) or not 0 <= p <= 0.75 for p in noise.values()
+        ):
+            raise ValueError("noise rates must be finite nonboolean numbers in 0..0.75")
+        self._validate_faults(settings["faults"])
+        circuit = stim.Circuit.generated(
+            settings["circuit"],
+            distance=settings["distance"],
+            rounds=settings["rounds"],
+            **settings["noise"],
+        ).flattened()
+        faults = settings["faults"]
+        # This fixed memory circuit has deterministic detectors/observable.
+        # Disable gauge/stabilizer randomization to expose noise-only Pauli frames;
+        # the frames are error propagation, not a quantum state tomography.
+        simulator = stim.FlipSimulator(
+            batch_size=1,
+            num_qubits=circuit.num_qubits,
+            seed=settings["seed"],
+            disable_stabilizer_randomization=True,
+        )
+        segments = [stim.Circuit()]
+        for op in circuit:
+            if op.name == "TICK":
+                segments.append(stim.Circuit())
+            else:
+                segments[-1].append(op)
+        injected = stim.Circuit()
+        frozen = stim.Circuit()
+        trace = []
+        events = []
+        noise_ops = {"DEPOLARIZE1", "DEPOLARIZE2", "X_ERROR", "Y_ERROR", "Z_ERROR"}
+        operation_index = 0
+        for tick, segment in enumerate(segments):
+            if tick:
+                injected.append("TICK")
+                frozen.append("TICK")
+            for fault in faults:
+                if fault["tick"] == tick:
+                    op = stim.CircuitInstruction(
+                        fault["pauli"] + "_ERROR", [fault["qubit"]], [1]
+                    )
+                    simulator.do(op)
+                    injected.append(op)
+                    frozen.append(op)
+            for op in segment:
+                injected.append(op)
+                before = (
+                    simulator.peek_pauli_flips(instance_index=0)
+                    if op.name in noise_ops
+                    else None
+                )
+                simulator.do(op)
+                if before is not None:
+                    after = simulator.peek_pauli_flips(instance_index=0)
+                    for qubit in range(circuit.num_qubits):
+                        pauli = before[qubit] ^ after[qubit]
+                        if pauli:
+                            label = "_XYZ"[pauli]
+                            events.append(
+                                dict(
+                                    tick=tick,
+                                    operation_index=operation_index,
+                                    operation=op.name,
+                                    qubit=qubit,
+                                    pauli=label,
+                                )
+                            )
+                            frozen.append(label + "_ERROR", [qubit], 1)
+                else:
+                    frozen.append(op)
+                operation_index += 1
+            frame = simulator.peek_pauli_flips(instance_index=0)
+            bits = simulator.get_detector_flips(instance_index=0)
+            trace.append(
+                dict(
+                    tick=tick,
+                    operations=str(segment),
+                    pauli_frame={
+                        str(q): "_XYZ"[frame[q]] for q in range(len(frame)) if frame[q]
+                    },
+                    faults=[f for f in faults if f["tick"] <= tick],
+                    detector_indices=[i for i, bit in enumerate(bits) if bit],
+                )
+            )
+        bits = simulator.get_detector_flips(instance_index=0)
+        syndrome = sum(int(bit) << i for i, bit in enumerate(bits))
+        observable = int(simulator.get_observable_flips(instance_index=0)[0])
+        if self._sample(frozen) != (syndrome, observable):
+            raise IOError("Sampled noise replay did not reproduce the original shot")
+        result = decode(self.config["detectors"], self.config["edges"], syndrome)
+        reference_prediction = result["prediction"]
+        hardware = self.decoder(syndrome) if self.decoder is not None else None
+        if self.decoder is not None and (
+            not isinstance(hardware, dict)
+            or type(hardware.get("prediction")) is not int
+            or hardware["prediction"] not in (0, 1)
+            or type(hardware.get("cycles")) is not int
+            or hardware["cycles"] <= 0
+        ):
+            raise IOError("Invalid FPGA decoder result")
+        if hardware is not None:
+            result["prediction"] = hardware["prediction"]
+        # A host representative is not an FPGA-provided correction. Freeze every
+        # sampled noise event before replay; re-seeding a stochastic circuit after
+        # inserting operations would NOT verify correction of the original shot.
+        correction = self._correction(
+            [dict(tick=t) for t in range(len(segments))], syndrome, result["prediction"]
+        )
+        replay = None
+        rs = ro = None
+        if correction is not None:
+            replay = stim.Circuit()
+            tick = 0
+            for op in frozen:
+                if op.name == "TICK":
+                    tick += 1
+                if op.name == "TICK" or len(replay) == 0:
+                    if op.name == "TICK":
+                        replay.append(op)
+                    for fault in correction:
+                        if fault["tick"] == tick:
+                            replay.append(
+                                fault["pauli"] + "_ERROR", [fault["qubit"]], 1
+                            )
+                    if op.name == "TICK":
+                        continue
+                replay.append(op)
+            rs, ro = self._sample(replay)
+            if rs != 0 or ro != observable ^ result["prediction"]:
+                correction = replay = None
+                rs = ro = None
+        return dict(
+            result,
+            settings=settings,
+            syndrome=syndrome,
+            observable=observable,
+            detector_indices=trace[-1]["detector_indices"],
+            trace=trace,
+            source="FPGA" if hardware is not None else "Simulated",
+            hardware=hardware,
+            reference_prediction=reference_prediction,
+            host_frame=result["prediction"],
+            logical_success=observable == result["prediction"] and not result["error"],
+            injected_circuit=str(injected),
+            sampled_circuit=str(frozen),
+            sampled_noise=dict(
+                events=events,
+                simulator="stim.FlipSimulator",
+                stim_version=stim.__version__,
+                seed=settings["seed"],
+                stabilizer_randomization=False,
+                provenance="Actual per-operation sampled Pauli deltas; explicit faults excluded",
+            ),
+            correction=correction,
+            correction_status=(
+                "verified_counterfactual" if correction is not None else "unavailable"
+            ),
+            corrected_circuit=str(replay) if replay is not None else None,
+            correction_frame=(
+                self._pauli_trace(correction)[-1] if correction is not None else {}
+            ),
+            residual_syndrome=rs,
+            residual_observable=ro,
+        )
+
     def _segments(self):
         """Split the ideal circuit at TICKs, retaining the initial pre-TICK segment."""
         segments = [stim.Circuit()]
@@ -110,8 +311,8 @@ class Lab:
             )
         return frames
 
-    def simulate_faults(self, faults):
-        """Validate timed faults, obtain a prediction and independently replay a same-tick representative."""
+    def _validate_faults(self, faults):
+        """Reject malformed or unsupported explicit timed data-qubit faults before I/O."""
         allowed = {q["id"] for q in self.layout()["data"]}
         if not isinstance(faults, list) or len(faults) > 64:
             raise ValueError("faults must be a list of at most 64 records")
@@ -126,6 +327,10 @@ class Lab:
                 or f["pauli"] not in ("X", "Y", "Z")
             ):
                 raise ValueError("Expected tick, data qubit and Pauli X/Y/Z")
+
+    def simulate_faults(self, faults):
+        """Validate timed faults, obtain a prediction and independently replay a same-tick representative."""
+        self._validate_faults(faults)
         injected = self._fault_circuit(faults)
         syndrome, observable = self._sample(injected)
         result = decode(self.config["detectors"], self.config["edges"], syndrome)
@@ -169,9 +374,9 @@ class Lab:
             observable=observable,
             correction=correction,
             corrected_circuit=str(replay) if replay is not None else None,
-            correction_frame=self._pauli_trace(correction)[-1]
-            if correction is not None
-            else {},
+            correction_frame=(
+                self._pauli_trace(correction)[-1] if correction is not None else {}
+            ),
             residual_syndrome=rs,
             residual_observable=ro,
             detector_indices=indices,
@@ -325,6 +530,33 @@ class Lab:
                 dict(id=d, coords=c, available_tick=availability[d])
                 for d, c in self.clean.get_detector_coordinates().items()
             ],
+            supported_circuits=[
+                dict(
+                    circuit="surface_code:rotated_memory_z",
+                    distance=3,
+                    rounds=3,
+                    graph="d3_z_r3.json",
+                    detectors=24,
+                    observables=1,
+                    limitation="Fixed graph and detector ordering; other circuits require a matching FPGA image",
+                )
+            ],
+            run_defaults=dict(
+                circuit="surface_code:rotated_memory_z",
+                distance=3,
+                rounds=3,
+                noise=dict.fromkeys(
+                    (
+                        "after_clifford_depolarization",
+                        "before_round_data_depolarization",
+                        "before_measure_flip_probability",
+                        "after_reset_flip_probability",
+                    ),
+                    0.001,
+                ),
+                seed=1,
+                faults=[],
+            ),
             injection="Before selected tick operations",
             code="Rotated surface code · d=3 · Z memory · 3 rounds",
             edges=self.config["edges"],
@@ -404,8 +636,23 @@ def make_server(port=8765, decoder=None):
             self.end_headers()
             self.wfile.write(body)
 
+        def trusted_host(self):
+            """Reject DNS-rebinding authorities before serving assets or touching serial."""
+            port = self.server.server_port
+            allowed = {f"127.0.0.1:{port}", f"localhost:{port}"}
+            if port == 80:
+                allowed.update({"127.0.0.1", "localhost"})
+            hosts = self.headers.get_all("Host", [])
+            if len(hosts) != 1 or hosts[0] not in allowed:
+                self.close_connection = True
+                self.reply(403, {"error": "Only loopback Host authorities are allowed"})
+                return False
+            return True
+
         def do_GET(self):
             """Serve the derived layout or one of three allowlisted local assets; reject other paths."""
+            if not self.trusted_host():
+                return
             if self.path == "/api/layout":
                 self.reply(200, model.layout())
                 return
@@ -422,7 +669,9 @@ def make_server(port=8765, decoder=None):
 
         def do_POST(self):
             """Validate framing/origin/body, acquire the decoder lock, and map input/backend errors to HTTP."""
-            if self.path != "/api/simulate":
+            if not self.trusted_host():
+                return
+            if self.path not in ("/api/simulate", "/api/run"):
                 self.reply(404, {"error": "Not found"})
                 return
             # There is no cross-origin API or filesystem access. Bound memory and
@@ -437,23 +686,26 @@ def make_server(port=8765, decoder=None):
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= 4096:
+                limit = 16384 if self.path == "/api/run" else 4096
+                if not 0 < length <= limit:
                     self.reply(
-                        413 if length > 4096 else 400,
-                        {"error": "Body must be 1 to 4096 bytes"},
+                        413 if length > limit else 400,
+                        {"error": f"Body must be 1 to {limit} bytes"},
                     )
                     self.close_connection = True
                     return
                 body = json.loads(self.rfile.read(length))
-                if not isinstance(body, dict) or set(body) not in (
-                    {"errors"},
-                    {"faults"},
+                if self.path == "/api/simulate" and (
+                    not isinstance(body, dict)
+                    or set(body) not in ({"errors"}, {"faults"})
                 ):
                     raise ValueError("Expected an object containing only faults")
                 if not lock.acquire(timeout=2):
                     raise IOError("Decoder busy; retry")
                 try:
-                    if "faults" in body:
+                    if self.path == "/api/run":
+                        result = model.run(body)
+                    elif "faults" in body:
                         result = model.simulate_faults(body["faults"])
                     elif decoder:
                         # Old API is explicitly converted to the original location.

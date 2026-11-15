@@ -2,47 +2,72 @@
 
 Companion to [`web.py`](web.py).
 
-## Contracts and flow
+## Configurable single-shot run
 
-`Lab(decoder=None)` loads the fixed d3 Z graph and flattened ideal circuit. `_segments` derives tick boundaries; `_fault_circuit` injects probability-one X/Y/Z_ERROR operations before selected tick operations so Stim's noiseless reference does not absorb bare Pauli gates. `_sample` returns a packed 24-detector syndrome and observable. `_signature` caches singleton effects, and `_basis` builds bounded GF(2) pivots carrying Pauli representatives. `_correction` solves the full detector-plus-predicted-observable signature at selected fault ticks or returns None; it is not MWPM or a minimum-weight optimizer.
+`POST /api/run` accepts exactly this object (all fields required):
 
-`simulate_faults` validates at most 64 exact tick/qubit/pauli records, decodes UF, derives detector availability and an illustrative propagated Pauli trace, optionally obtains external prediction, and independently samples the corrected counterfactual circuit. `_pauli_trace` conjugates H/CX and erases resets. Invalid external results raise rather than fallback. External prediction may replace prediction, but graph correction_edges remain host UF-derived; the API retains reference_prediction and hardware evidence separately. Zero syndrome alone never means logical success.
-
-Legacy `simulate(errors)` accepts canonical data-ID strings to Pauli mappings and injects after first MR via `_circuit`. `_representatives` uses dynamic programming for minimum-support same-signature legacy representatives. `layout()` derives coordinates, supports, gates and detector availability from actual Stim operations rather than a hand-drawn lattice.
-
-`SerialDecoder` lazily opens an explicit exclusive UART per call, uses a bounded mutex and wrapping sequence, disables deliberate handshake-line reset and rejects malformed/zero-cycle replies. It assumes the loaded fixed d3 memory image, not arbitrary compiler graphs.
-
-`make_server(port, decoder)` returns a 127.0.0.1 ThreadingHTTPServer. Its nested Handler serves only three local assets and GET /api/layout; POST /api/simulate accepts exactly errors or faults in a 1..4096-byte JSON body. It rejects transfer encoding/cross-origin writes, bounds sockets and decoder-lock waits, serializes model access, maps invalid input to 400 and backend failure to 503, and sets no-store/nosniff/CSP headers. Legacy errors are converted to tick 8 when hardware is configured. `main()` serves until interruption and closes the server. Counterfactual replay and host frames are not physical feedback or PL-provided correction edges.
-
-## Callable index
-
-- `Lab` — Stim-backed d3 Z teaching model with optional external prediction and counterfactual replay.
-- `Lab.__init__` — Load the committed decoder graph and flattened ideal circuit without opening serial.
-- `Lab._segments` — Split the ideal circuit at TICKs, retaining the initial pre-TICK segment.
-- `Lab._fault_circuit` — Inject probability-one Pauli errors before operations at each selected tick.
-- `Lab._signature` — Cache a singleton fault as 24 detector bits followed by its observable bit.
-- `Lab._basis` — Build a bounded GF(2) basis of real singleton signatures and their Pauli representatives.
-- `Lab._correction` — Solve the requested syndrome/prediction signature at the injected ticks, or return None.
-- `Lab._pauli_trace` — Propagate an illustrative Pauli frame through H/CX and erase reset-qubit errors.
-- `Lab.simulate_faults` — Validate timed faults, obtain a prediction and independently replay a same-tick representative.
-- `Lab._circuit` — Build the legacy injection circuit, placing errors after the first MR instruction.
-- `Lab._sample` — Sample one deterministic fault circuit and return packed syndrome and observable.
-- `Lab._representatives` — Find minimum-support legacy Pauli representatives by dynamic programming over signatures.
-- `Lab.simulate` — Validate legacy qubit-to-Pauli input and return UF correction plus independent replay evidence.
-- `Lab.layout` — Derive data/check supports, detector availability and operation ticks from the actual Stim circuit.
-- `SerialDecoder` — One complete-window transaction; no reset or programming commands.
-- `SerialDecoder.__init__` — Configure a port name, bounded lock timeout and sequence counter without opening it.
-- `SerialDecoder.__call__` — Serialize one exclusive UART transaction; reject invalid replies without software fallback.
-- `make_server` — Return a loopback-bound threaded HTTP server with bounded JSON input and serialized decoding.
-- `main` — Serve the local teaching lab, optionally using an explicitly selected loaded memory-image UART.
-
-## Usage and verification
-
-Run from the repository root using the configured Python environment (for example `qec/.venv/bin/python` in place of `python`).
-
-```sh
-python -m qec.surface.web --help
-python -m pytest -q qec/tests/test_web.py
+```json
+{
+  "circuit": "surface_code:rotated_memory_z",
+  "distance": 3,
+  "rounds": 3,
+  "noise": {
+    "after_clifford_depolarization": 0.001,
+    "before_round_data_depolarization": 0.001,
+    "before_measure_flip_probability": 0.001,
+    "after_reset_flip_probability": 0.001
+  },
+  "seed": 1,
+  "faults": [{"tick": 9, "qubit": 10, "pauli": "X"}]
+}
 ```
 
-Help-only commands intentionally avoid hardware I/O; physical entry points require explicit authorization and matching prebuilt artifacts before actual capture.
+Use `faults: []` for stochastic noise alone. Circuit, distance and rounds are restricted to the committed `d3_z_r3.json` graph, including its detector order and observable definition. Other circuits are rejected before decoder I/O, even without a serial decoder. The distance/round counts must be integers, not booleans or floating-point equivalents. Each noise rate must be a finite, nonboolean number in **0..0.75**, inclusive. The seed must be an integer in **0..9007199254740991**. No extra noise/settings keys are accepted. Faults are at most 64 exact `tick`, `qubit`, `pauli` records, using data qubits, valid tick indices and X/Y/Z. They are injected before that tick's operations.
+
+`Lab.run(settings)` generates the actual noisy flattened Stim circuit. One `stim.FlipSimulator(batch_size=1)` executes it operation by operation. Detector flips, the observable flip and each end-of-tick Pauli frame come from **that same simulation instance**. Stabilizer randomization is disabled deliberately: this fixed memory circuit has deterministic detectors and observable, and the visualization is a noise-error frame, not a quantum-state reconstruction. Preparation and measurement gauge randomness must not be misrepresented as sampled hardware faults.
+
+At each generated Pauli noise operation, the simulator's pre/post frame delta supplies actual sampled per-qubit errors, with tick, generated operation index and operation name. Two-qubit depolarization can produce two entries for one operation. Identity outcomes have no entry. Explicit user faults are excluded from `sampled_noise.events` and remain in `settings.faults` and trace `faults`. These records are not inferred from the detector syndrome.
+
+The run freezes sampled noise into probability-one Pauli errors in `sampled_circuit`. An independent deterministic Stim sample must reproduce its original syndrome and observable before decoding. Seed reproduction is scoped to the same Stim version, machine/SIMD support, batch size and exact operation-call sequence; it is not guaranteed across versions or platforms. `sampled_noise` records the seed, Stim version, simulator and randomization choice.
+
+## Results and correction evidence
+
+The response retains the existing timed-fault result schema:
+
+- `syndrome`: packed detector bits; `observable`: actual sampled logical flip.
+- `prediction`, `host_frame`: the selected prediction. A configured external decoder's returned bit is authoritative, even when it disagrees with host UF.
+- `reference_prediction`, `correction_edges` and `error`: host UF evidence from the fixed committed graph. Hardware cycles live separately in `hardware.cycles`; graph edges are never FPGA-returned physical corrections.
+- `trace`: per-tick `tick`, `operations`, `pauli_frame`, cumulative explicit `faults` and only detector events available by that tick.
+- `source`: `FPGA` when an external decoder supplied the result, otherwise `Simulated`; `hardware`: the external result or null.
+- `settings`, `injected_circuit`: submitted settings and actual noisy circuit including explicit faults.
+- `sampled_noise`, `sampled_circuit`: actual noise provenance and a deterministic replay of the particular shot.
+- `correction`, `correction_frame`, `corrected_circuit`, `residual_syndrome`, `residual_observable`, `correction_status`: host physical representative and counterfactual verification evidence, or null/unavailable evidence.
+
+A GF(2) basis of actual singleton data-fault signatures across all valid ticks solves the full detector-plus-selected-prediction signature. Its Pauli representative is inserted into the **frozen sampled circuit**, never a fresh stochastic resample. Verification requires residual syndrome zero and residual observable equal to `observable XOR prediction`. A representative that cannot be solved or verified is returned as `correction: null`, `corrected_circuit: null`, null residuals, empty correction frame and `correction_status: "unavailable"`; verified results use `"verified_counterfactual"`. This is an illustrative host counterfactual across the full memory experiment, not causal feedback to a quantum device, and not necessarily a minimum-weight correction.
+
+`logical_success` always compares actual sampled observable with selected prediction and requires no host UF error. Detector cancellation alone does not prove logical success. Failed or malformed external decoder replies raise; there is no silent software fallback.
+
+## Existing APIs and model helpers
+
+`Lab(decoder=None)` loads the fixed graph and ideal flattened circuit without opening serial. `_segments` splits the ideal circuit at TICKs. `_fault_circuit` inserts probability-one Pauli errors. `_sample` independently samples deterministic circuits. `_signature`, `_basis` and `_correction` build and solve singleton signatures; `_pauli_trace` propagates an illustrative fault frame through H/CX and erases reset errors. `_validate_faults` is shared by configurable and deterministic timed-fault runs.
+
+`POST /api/simulate` remains backward compatible: exactly `{"faults": [...]}` calls `simulate_faults`; exactly `{"errors": {"10": "X"}}` calls legacy `simulate` without hardware, or converts to tick 8 with hardware after validating legacy input. These APIs have no stochastic noise settings. `simulate_faults` solves at the explicit fault ticks and independently verifies a deterministic counterfactual. Legacy `_circuit` injects after the first MR; `_representatives` uses dynamic programming for minimum-support same-signature legacy representatives.
+
+`GET /api/layout` derives coordinates, supports, gate ticks and detector availability from the ideal circuit. It also returns `supported_circuits` metadata and `run_defaults` (all four noise rates 0.001, seed 1, no explicit faults). Changing noise does not recompile the committed decoder graph or load a new FPGA image.
+
+## HTTP and serial boundaries
+
+`make_server(port=8765, decoder=None)` keeps its signature and binds a threaded HTTP server to 127.0.0.1. The handler serves only three allowlisted local assets and the layout endpoint. Configurable run bodies are bounded to **1..16384 bytes**, adequate for a formatted 64-fault request; legacy simulation retains **1..4096 bytes**. Transfer encoding and cross-origin writes are rejected. Every GET and POST also requires a single `Host` authority of `127.0.0.1:PORT` or `localhost:PORT` for this server's actual port, rejecting DNS-rebinding hostnames before serving assets or invoking the decoder. Socket operations and decoder-lock acquisition are bounded, model access is serialized, invalid requests return 400 (413 for oversized bodies), and backend failures return 503 with source information. Responses include no-store, nosniff and restrictive CSP headers.
+
+`SerialDecoder` lazily opens an explicitly selected exclusive UART for one complete-window transaction. It uses a bounded mutex and wrapping sequence, avoids deliberate handshake-line reset, and rejects malformed or zero-cycle replies. It assumes a matching loaded fixed d3 Z r3 memory image; this web endpoint does not establish board-image identity or program hardware. `main()` serves until interruption and closes the server.
+
+## Verification
+
+From the repository root with the configured environment:
+
+```sh
+qec/.venv/bin/python -m qec.surface.web --help
+qec/.venv/bin/python -m pytest -q qec/tests/test_web.py qec/tests/test_web_run.py
+```
+
+The new regression suite checks deterministic seed reproduction, distinct sampled shots across seeds, zero/maximum noise, exact sampled and corrected replay, invalid settings before decoder I/O, a formatted maximum-fault HTTP request, authoritative external prediction and no fallback. No physical hardware is required or exercised by these tests.

@@ -1,27 +1,13 @@
-# `test_web_ui.cjs` — offline replay contract tests
+# `test_web_ui.cjs` — offline frontend contracts
 
-This CommonJS suite uses only Node built-ins: `node:test`, strict assertions, filesystem and path helpers. It resolves `../surface/web_assets/app.js` relative to `__dirname`, so invoking it from the repository root requires no npm install. The application's `document` guard means requiring it exports pure helpers without starting browser initialization or fetching anything.
+Run `node --test qec/tests/test_web_ui.cjs` from the repository root. The six Node built-in tests require no npm packages, server, browser or board. Importing `app.js` exports pure helpers without starting browser setup.
 
-## Tests and contracts
+Coverage:
 
-1. **Stale layout rejection:** `validateLayout()` rejects missing/empty tick arrays with an actionable restart-server error and returns a compatible object unchanged. The sample layout has `ticks: [{operations: []}]`, `data`, `checks`, and `detectors` arrays.
-2. **Stale replay rejection:** `validateReplay()` rejects missing trace and a trace shorter than the requested tick count; a compatible trace has one `{pauli_frame: {}}` per physical tick, with `detector_indices` alongside it. Return identity is asserted.
-3. **Cursor and fault history:** `LabState(21)` supports arbitrary seek, previous/next, clamping to zero and extra cursor 22, distinct tick-8 X/tick-16 Z faults on q10, toggling an identical selection away, and resetting history/cursor.
-4. **Measurement availability:** `visibleDetectors()` uses `available_tick` inclusively, and recomputes after backward scrubbing. A fired ID is hidden before its measurement boundary; viewing a later tick cannot permanently reveal it.
-5. **HTML integration hooks:** the static shell exposes replay/fault/evidence IDs, range input, polite live region, “Host correction”, initially disabled Play, and puts Play/status before the lattice. The assertions also prohibit obsolete introductory/footer markup. This is source-string validation, not a browser accessibility tree or computed layout check.
+- `runSettings` constructs only rotated d3 Z-memory/three-round requests, preserves independent noise values and snapshots timed faults; invalid rates and negative seeds throw actionable errors.
+- Layout/replay compatibility guards reject missing/empty tick data and missing or wrong-length traces with restart guidance.
+- `LabState` supports reversible seek/step, cursor clamping including the host overlay, multi-time fault selection and clearing.
+- Detector availability is inclusive at measurement time and reversible under backward scrubbing.
+- HTML exposes the numbered Configure/Simulate/Replay steps, settings/Run/summary IDs, initially disabled Replay, live error region and prominent lattice/timeline. Evidence remains collapsed and transport/status precede the workspace.
 
-The suite intentionally supplies small synthetic schema/state inputs. These are unit fixtures, not claimed simulation or FPGA results. Compatibility coverage is selective: passing does not imply exhaustive validation of malformed nested values, request concurrency, timers or server input limits.
-
-## Run and interpret
-
-From the repository root:
-
-```sh
-node --test qec/tests/test_web_ui.cjs
-# Both maintained JS suites; real-browser case skips without QEC_WEB_URL:
-node --test qec/tests/*.cjs
-```
-
-Expected standalone result is five passing tests with no skips. No server, Python environment, browser, UART or board is involved. A failure naming an ID/order concerns the HTML binding contract; a restart-error failure concerns the compatibility guard; state failures concern cursor or edit-history semantics.
-
-To exercise actual loading, playback, computed colors and error recovery, run the adjacent `test_web_browser.cjs` with an explicitly started simulation server as documented in `test_web_browser.md`. These layers complement each other: offline tests cannot establish visual rendering or hardware evidence.
+Small synthetic inputs here are unit fixtures, not simulation/FPGA results. Source-string assertions cannot prove browser layout, timers, concurrency or fetch behavior. The adjacent opt-in Chrome test covers those integration boundaries using a real simulation server; see `test_web_browser.md`.

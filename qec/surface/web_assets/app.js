@@ -69,9 +69,28 @@ function validateReplay(data, tickCount) {
   }
   return data;
 }
+const noiseKeys = [
+  "after_clifford_depolarization",
+  "before_round_data_depolarization",
+  "before_measure_flip_probability",
+  "after_reset_flip_probability",
+];
+function runSettings(noise, seed, faults) {
+  for (const key of noiseKeys) {
+    if (!Number.isFinite(noise[key]) || noise[key] < 0 || noise[key] > 0.75)
+      throw Error("Set each noise rate between 0 and 0.75.");
+  }
+  if (!Number.isSafeInteger(seed) || seed < 0)
+    throw Error("Choose a nonnegative integer seed (within JavaScript's safe integer range).");
+  return {
+    circuit: "surface_code:rotated_memory_z", distance: 3, rounds: 3,
+    noise: { ...noise }, seed, faults: faults.map((fault) => ({ ...fault })),
+  };
+}
 // Export pure helpers for Node without executing browser setup.
 if (typeof module !== "undefined")
   module.exports = {
+    runSettings,
     LabState,
     visibleDetectors,
     validateLayout,
@@ -80,7 +99,7 @@ if (typeof module !== "undefined")
 
 if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
-  // A new request clears old evidence. Monotonic IDs prevent a late response
+  // Run and edits clear old evidence. Monotonic IDs prevent a late response
   // overwriting a newer edit; requests themselves are not aborted.
   let layout,
     state,
@@ -108,7 +127,7 @@ if (typeof document !== "undefined") {
   function stop() {
     clearTimeout(timer);
     timer = null;
-    $("play").textContent = "Play";
+    $("play").textContent = "Replay";
   }
   function seek(tick) {
     state.seek(tick);
@@ -116,7 +135,7 @@ if (typeof document !== "undefined") {
     render();
   }
   function advance() {
-    // Play advances immediately. Speed affects the next scheduled delay, not
+    // Replay advances immediately. Speed affects the next scheduled delay, not
     // circuit physics or server-side decoder execution.
     state.next();
     render();
@@ -126,7 +145,17 @@ if (typeof document !== "undefined") {
     }
     timer = setTimeout(advance, 700 / Number($("speed").value));
   }
+  function invalidate() {
+    stop();
+    ++requestId;
+    pending = false;
+    result = null;
+    failure = "";
+    state.seek(0);
+    render();
+  }
   async function simulate() {
+    if (!layout || pending) return;
     stop();
     const id = ++requestId;
     pending = true;
@@ -134,14 +163,15 @@ if (typeof document !== "undefined") {
     failure = "";
     render();
     try {
-      const data = await api("/api/simulate", {
-        faults: state.faults.map((f) => ({ ...f })),
-      });
+      const noise = Object.fromEntries(noiseKeys.map((key) => [key, $(key).value === "" ? NaN : Number($(key).value)]));
+      const settings = runSettings(noise, $("seed").value === "" ? NaN : Number($("seed").value), state.faults);
+      const data = await api("/api/run", settings);
       if (id !== requestId) return;
       result = validateReplay(data, layout.ticks.length);
+      state.seek(0);
     } catch (e) {
       if (id !== requestId) return;
-      failure = e.message;
+      failure = `${e.message} Check settings and the server/FPGA connection, then press Run to retry.`;
     }
     pending = false;
     render();
@@ -174,17 +204,22 @@ if (typeof document !== "undefined") {
       : operations.map((op) => op.name).join(" · ");
     $("position").textContent = `${state.tick} / ${state.lastTick + 1}`;
     $("scrubber").value = state.tick;
-    $("scrubber").disabled = false;
-    $("back").disabled = state.tick === 0;
-    $("step").disabled = state.tick > state.lastTick;
+    $("scrubber").disabled = !result || pending;
+    $("back").disabled = !result || pending || state.tick === 0;
+    $("step").disabled = !result || pending || state.tick > state.lastTick;
     $("play").disabled = pending || !result;
-    $("example").disabled = false;
-    $("reset").disabled = false;
+    $("run").disabled = pending;
+    $("run").textContent = pending ? "Running…" : "Run";
+    document.querySelectorAll("#configure input, #configure select, #configure button").forEach((control) => { control.disabled = pending; });
+    $("run-title").textContent = layout.source === "FPGA" ? "2 Simulate + FPGA decode" : "2 Simulate + software decode";
+    $("run-summary").textContent = result
+      ? `Completed · ${result.source} · seed ${result.settings?.seed ?? "not reported"} · prediction ${result.prediction} · observable ${result.observable} · cycles ${result.hardware?.cycles ?? result.cycles ?? "N/A (software)"}`
+      : "";
     $("source").textContent = failure
       ? `${layout.source} · unavailable`
       : result?.source || layout.source;
     $("status").className = failure ? "failed" : "";
-    $("status").textContent = failure || (pending ? "Decoding…" : "");
+    $("status").textContent = failure || (pending ? "Simulating + decoding…" : result ? "Ready to replay · no new decoder requests" : "Run to update · configure settings or select faults, then press Run");
     const active = new Set(operations.flatMap((op) => op.targets));
     const byId = new Map(
       [...layout.data, ...layout.checks].map((q) => [q.id, q]),
@@ -233,11 +268,13 @@ if (typeof document !== "undefined") {
             .map((op) => op.name);
       button.innerHTML = `<span>${data ? "q" : q.basis}${q.id}</span><b>${corrected ? residual || (data ? "I" : "·") : fault || (fired ? "1" : "·")}</b>${gates.length ? `<em>${gates.join("/")}</em>` : ""}${fix ? `<small>+${fix}</small>` : ""}`;
       if (data) {
+        button.disabled = pending;
         const selected = state.faults.some(
           (f) => f.qubit === q.id && f.tick === Number($("fault-tick").value),
         );
         button.setAttribute("aria-pressed", String(selected));
         button.onclick = () => {
+          if (pending) return;
           const faultTick = Number($("fault-tick").value);
           if (
             !Number.isInteger(faultTick) ||
@@ -249,7 +286,7 @@ if (typeof document !== "undefined") {
             return;
           }
           state.toggle(q.id, pauli, faultTick);
-          simulate();
+          invalidate();
         };
       } else {
         button.tabIndex = -1;
@@ -331,8 +368,8 @@ if (typeof document !== "undefined") {
     $("circuit").textContent = result?.injected_circuit || "";
     $("corrected-circuit").textContent = result?.corrected_circuit || "";
   }
-  // Selection/cursor changes redraw only. Fault edits/example/reset request a
-  // fresh complete-window simulation; playback traverses that response locally.
+  // Edits invalidate evidence without requests. Only Run submits a complete
+  // window; replay controls traverse the accepted response locally.
   document.querySelectorAll("[data-pauli]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -345,20 +382,29 @@ if (typeof document !== "undefined") {
         render();
       }),
   );
+  $("run").onclick = simulate;
+  document.querySelectorAll(".settings input, .settings select").forEach((control) => {
+    control.oninput = () => { if (state) invalidate(); };
+    control.onchange = () => { if (state) invalidate(); };
+  });
   $("back").onclick = () => {
+    if (!result || pending) return;
     stop();
     seek(state.tick - 1);
   };
   $("step").onclick = () => {
+    if (!result || pending) return;
     stop();
     seek(state.tick + 1);
   };
   $("scrubber").oninput = () => {
+    if (!result || pending) return;
     stop();
     seek(Number($("scrubber").value));
   };
   $("fault-tick").oninput = () => render();
   $("play").onclick = () => {
+    if (!result || pending) return;
     if (timer) {
       stop();
       return;
@@ -368,15 +414,17 @@ if (typeof document !== "undefined") {
     advance();
   };
   $("example").onclick = () => {
+    if (pending || !state) return;
     state.reset();
     state.toggle(10, "X", 8);
     $("fault-tick").value = 8;
-    simulate();
+    invalidate();
   };
   $("reset").onclick = () => {
+    if (pending || !state) return;
     state.reset();
     $("fault-tick").value = 0;
-    simulate();
+    invalidate();
   };
   document.addEventListener("keydown", (e) => {
     // Leave native controls, text entry and modified browser shortcuts alone.
@@ -388,7 +436,7 @@ if (typeof document !== "undefined") {
         e.target.closest("input,select,textarea,button,summary"))
     )
       return;
-    if (!state) return;
+    if (!state || !result || pending) return;
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
       stop();
@@ -399,7 +447,7 @@ if (typeof document !== "undefined") {
       $("play").click();
     }
   });
-  // Start with the explicit X q10@8 example, not hidden background noise.
+  // Select the explicit X q10@8 example without executing any run.
   api("/api/layout")
     .then((data) => {
       layout = validateLayout(data);
@@ -408,7 +456,7 @@ if (typeof document !== "undefined") {
       $("fault-tick").value = 8;
       $("scrubber").max = state.lastTick + 1;
       $("fault-tick").max = state.lastTick;
-      simulate();
+      render();
     })
     .catch((e) => {
       $("source").textContent = "Unavailable";

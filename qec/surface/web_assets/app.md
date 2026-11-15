@@ -1,40 +1,40 @@
-# `app.js` — replay controller and renderer
+# `app.js` — configure, run and local replay
 
-This dependency-free script is loaded with `defer` by `index.html`. It displays the fixed rotated distance-three Z-memory, three-round teaching circuit. It does not run Stim or a decoder in JavaScript, and animation is not live hardware telemetry.
+The dependency-free deferred controller supports only the hardware-compatible rotated d3 Z-memory circuit with three rounds. It does not run Stim or a decoder in JavaScript.
 
-## Structure and state
+## State and helpers
 
-- `LabState(lastTick = 21)` owns the editable `faults` array and replay cursor. `reset()` clears both; `seek()` rounds and clamps to `0..lastTick+1`; `next()`/`previous()` delegate to it. The extra position is the **host correction** overlay, not a circuit operation. `toggle(qubit, pauli, tick)` removes an identical selection or replaces a different Pauli at the same `(tick, qubit)`; faults on different ticks stay independent. Its default injection time clamps the cursor to the last physical tick.
-- `visibleDetectors(detectors, indices, tick)` filters fired IDs by `available_tick`. Backward scrubbing recomputes availability; previously seen events are not latched.
-- `validateLayout()` and `validateReplay()` return the original object after minimal compatibility checks, or throw an actionable restart error. They are not complete JSON-schema validators. These helpers and `LabState` are CommonJS exports for the offline tests.
-- The `document` guard contains browser-only setup. `layout` describes the circuit; `state` describes edits/cursor; `result` is the latest accepted server response; `pending`/`failure` drive status; `requestId` rejects out-of-order responses; `timer` is the local playback timeout; `pauli` is the current injection tool.
-- `api()` performs same-origin GET or JSON POST and propagates the server's JSON error. `simulate()` stops playback, snapshots faults, clears old results, posts them, validates the response and redraws. Older requests are ignored, not cancelled.
-- `stop()`, `seek()` and `advance()` manage transport. Play moves immediately, then schedules steps at `700 / speed` milliseconds. Changing speed affects a subsequently scheduled delay. Explicit seeking updates the fault-tick input; timed advance does not.
-- `position()` maps circuit coordinates to the 720-unit SVG/percentage lattice. `combine()` composes Pauli letters modulo global phase. `render()` rebuilds CX links, qubit buttons, the four-column detector timeline, status/result labels, evidence JSON and circuit text. It restores focused qubits after rebuilding buttons.
+`LabState` owns selected timed Pauli faults and the cursor, clamped to physical ticks plus one host-correction position. Identical fault selections toggle off; a different Pauli replaces the same tick/qubit. `visibleDetectors` recomputes measurement availability on every render, including backward scrubbing. `validateLayout` and `validateReplay` reject incompatible server schemas with an actionable restart error. `runSettings` validates independent finite noise rates in 0–0.75 and a nonnegative safe-integer seed, and snapshots faults with the fixed circuit/distance/rounds. These helpers are CommonJS exports for offline tests.
 
-## Server data contract
+Browser state separates `layout`, editable `state`, accepted `result`, pending/failure state, a monotonic request ID and a local timeout. Startup fetches only `GET /api/layout`, selects the explicitly labeled X q10@8 example and renders it without running. Defaults are four noise rates of 0.001 and seed 20261107.
 
-`GET /api/layout` supplies nonempty `ticks`, each with `operations: [{name, targets}]`; `data` and `checks` contain `{id, coords}` with `basis` on checks; `detectors` contain `{id, coords: [x,y,time], available_tick}`; `source` labels provenance. CX `targets` are consecutive control/target pairs. Current rendering assumes four detector-time columns and the teaching layout's coordinate scale.
+## Explicit run contract
 
-`POST /api/simulate` sends only `{faults: [{tick, qubit, pauli}]}`. Each fault enters **before** its selected tick's operations. The server validates integer times/data-qubit IDs, Pauli X/Y/Z and request limits.
+Only `#run` invokes `simulate()`, which clears previous evidence, stops playback and sends `POST /api/run`:
 
-The renderer requires `detector_indices` and `trace` with one `{pauli_frame}` entry per physical tick. Frames map qubit IDs to nonidentity Pauli letters **after** that tick's operations. It also consumes `correction_frame`, nullable `correction`, nullable `residual_syndrome`, `logical_success`, `host_frame`, `source`, and circuit strings. Details expose `hardware`, `reference_prediction`, `syndrome`, `observable`, `prediction`, `correction_edges` and `residual_observable`.
+```json
+{"circuit":"surface_code:rotated_memory_z","distance":3,"rounds":3,"noise":{"after_clifford_depolarization":0.001,"before_round_data_depolarization":0.001,"before_measure_flip_probability":0.001,"after_reset_flip_probability":0.001},"seed":20261107,"faults":[{"tick":8,"qubit":10,"pauli":"X"}]}
+```
 
-Detector flips are withheld until their measurement boundary, independent of error-frame visibility. At the extra final cursor, the host correction combines with the last frame and detector cells can show `1→0`. An absent representative (`correction === null`) is labeled, not silently treated as a demonstrated correction.
+The response contains the replay schema plus `settings`. The renderer requires `detector_indices` and one trace `{pauli_frame}` per layout tick. It consumes prediction/observable/source/hardware, host correction/residual evidence and circuit strings. The completed summary displays response seed, prediction, observable, source and measured hardware cycles, or N/A for software. Full server validation remains authoritative.
 
-## Interaction and evidence boundary
+Settings and fault edits, Example and Clear never submit requests: `invalidate()` stops playback, clears evidence, resets the cursor and disables all replay controls with “Run to update”. Pauli-tool and injection-time selection alone only redraw, because they do not alter selected faults. Pending runs disable Run and editing controls, including lattice injection buttons. Request IDs additionally reject stale replies if a synthetic edit bypasses disabled controls. Failed requests show a retry action and never fall back to another decoder.
 
-Pauli selection and fault-time editing redraw locally. Clicking a data qubit, loading the example (X on q10 at tick 8), or clearing faults requests a fresh full-window result. Checks are not injection controls. Back/next/scrub stop playback; replay from the final position starts again at zero. Arrow keys and Space work outside native interactive controls and without Ctrl/Meta/Alt.
+## Replay and rendering
 
-An FPGA-backed server supplies prediction and measured cycles for a **complete window**. Graph correction edges, representative Pauli replay and residual circuit evidence are host-derived. Source labels and `edges_source: "Host reference"` keep that distinction explicit. No animation step sends a board command or demonstrates live feedback.
+Replay/Pause, back/next, scrub, speed and keyboard navigation are local. Replay advances immediately, then schedules at `700 / speed` milliseconds. At the end it restarts from zero; cursor controls stop playback. Space/arrow shortcuts avoid native interactive controls and modified shortcuts. Replay remains disabled until an explicit successful run.
 
-## Verification (repository root)
+`render()` derives CX SVG links, active gates, propagated Pauli terms and measurement-boundary detector cells from the server layout/trace. Qubit focus survives redraws. The extra final position overlays the host correction; an equivalent stabilizer residual need not be sitewise identity. Green cleared detector cells are host counterfactual evidence, not erased physical measurements. FPGA source means complete-window prediction/measured cycles only; correction edges and representative Pauli replay remain host-derived, not live feedback.
+
+## Verification
+
+From the repository root:
 
 ```sh
 node --test qec/tests/test_web_ui.cjs
 uv run --with stim --with pymatching python -m qec.surface.web --port 18766
-# In another terminal, simulation mode only (no --serial-port):
+# Separate terminal, simulation-only server:
 QEC_WEB_URL=http://127.0.0.1:18766 node --test qec/tests/test_web_browser.cjs
 ```
 
-The browser command needs Chrome and Node with native WebSocket/fetch support (Node 22+). See adjacent test docs for coverage and optional stale-server checks. Neither test establishes board timing or hardware correctness.
+The browser test uses real API results, CDP request counting, explicit failure injection and held real requests for stale-response protection. It does not establish hardware correctness.

@@ -1,36 +1,28 @@
-# `index.html` — replay page and DOM contract
+# `index.html` — three-step lab shell
 
-The page is a static semantic shell served at `/` by `qec.surface.web`. It loads `/style.css` and deferred `/app.js` from the same origin; it has no inline executable script or external asset dependency. Open it through the server, not a `file:` URL, because replay needs same-origin API endpoints.
+Served at `/` by `qec.surface.web`, this semantic shell loads same-origin deferred `/app.js` and `/style.css` without build tooling. Open through the server, not a file URL.
 
-## Document structure
+## DOM contract
 
-1. The header names the lab and exposes `#source` (initially “Connecting…”).
-2. `.toolbar` contains the X/Y/Z `data-pauli` buttons with `aria-pressed`, the integer `#fault-tick`, `#example`, `#reset`, fixed circuit description and `#scenario`.
-3. `.replay` contains `.transport`: `#back`, `#play`, `#step`, speed selector `#speed` and position output `#position`, followed by range input `#scrubber`. Initial values describe 22 physical ticks plus the host-overlay cursor; JavaScript sets maxima from the layout.
-4. `#status` is a polite live region **above** the visualization, so loading, decoding and API/schema failures do not require opening Details.
-5. `.workspace` contains the circuit section (`#tick-label`, `#operations`, dynamic `#lattice`, color legend) and detector section (dynamic `#timeline`, `#event-count`, live `#result`).
-6. Collapsed `#evidence` explains provenance and contains `#technical` JSON plus nested collapsed circuit panels `#circuit` and `#corrected-circuit`.
-7. `noscript` explains that JavaScript is required.
+1. **Configure:** `#configure` exposes the one supported `#circuit-template` (d3 Z memory, three rounds), `#seed` (20261107), four noise inputs (0.001 each, IDs matching API noise keys), X/Y/Z tools, `#fault-tick`, `#example`, `#reset` and selected-fault `#scenario`. Data-qubit buttons in the lattice also edit this configuration.
+2. **Simulate + decode:** `#run-title` becomes “2 Simulate + FPGA decode” for FPGA layout source, otherwise “2 Simulate + software decode”. `#run` explicitly submits one run; `#run-summary` reports completed source, seed, prediction, observable and cycles (N/A for software).
+3. **Replay:** `#play` retains its binding ID but is labeled Replay/Pause. `#back`, `#step`, `#speed`, `#position` and `#scrubber` control only the accepted result. Initially disabled replay becomes available only after a successful explicit run.
 
-## Interaction contract
+`#status` is a polite live region above the prominent lattice/timeline workspace. `#source` labels provenance in the header. `#lattice` contains dynamic qubit buttons/CX links, while `#timeline` holds four measurement-boundary columns. `#tick-label`, `#operations`, `#event-count` and `#result` describe the selected cursor. Collapsed `#evidence` contains technical JSON and original/corrected circuit text. Native details, labels, focus outlines and pressed tool states preserve keyboard access.
 
-IDs and `data-pauli` are binding hooks for `app.js`, not decorative names. The script creates qubit buttons and detector cells dynamically; the HTML does not hardcode circuit connectivity. Startup controls are disabled until their corresponding state is available, with Play requiring a valid replay. Data-qubit buttons are injection controls, whereas check buttons are non-tabbable display elements. The script retains qubit focus across redraws.
+## Behavior and evidence boundary
 
-The injection selector uses pressed state; previous/next and the scrubber have accessible labels. Status and logical result use polite live regions. Native `<details>` provides keyboard-operable evidence disclosure without custom handlers. Arrow/Space replay shortcuts intentionally avoid buttons, inputs, select controls and summaries so native interaction remains intact.
+Page load requests only `/api/layout`. Example selection, Clear and fault/settings edits never run automatically. Only `/api/run` submits the fixed circuit/settings/fault JSON; edits invalidate results with “Run to update”. Pending requests lock editing and Run. Failure keeps replay disabled and reports an actionable retry message. See `app.md` for exact payload and state semantics.
 
-## Data and evidence boundaries
+Faults enter before tick operations. The extra final cursor is a host-correction overlay, not another physical gate. FPGA decoding handles complete windows and returns prediction/cycles; graph edges and counterfactual representative replay are host-derived, not live feedback. The fixed selector does not promise arbitrary circuits.
 
-`GET /api/layout` provides operation lists, coordinates and detector availability; `POST /api/simulate` receives tick-tagged Pauli faults and returns trace/evidence. See `app.md` for exact consumed fields. The initial example is deliberate X on q10 at tick 8, not hidden random noise. Fault injection precedes the tick's operations.
-
-The evidence paragraph must remain consistent with the implementation: cursor 22 is a host correction overlay, FPGA requests decode complete windows, and graph edges/representative Pauli replay are host-derived counterfactuals rather than physical feedback. Keep this explanation beside evidence even if the server source is “FPGA”.
-
-## Verification (repository root)
+## Verification
 
 ```sh
 node --test qec/tests/test_web_ui.cjs
 uv run --with stim --with pymatching python -m qec.surface.web --port 18766
-# Separate terminal; do not add --serial-port to the server:
+# Separate terminal:
 QEC_WEB_URL=http://127.0.0.1:18766 node --test qec/tests/test_web_browser.cjs
 ```
 
-Offline tests check required IDs, range/live-region hooks, initial disabled Play and transport/status ordering. The opt-in Chrome test checks the actual DOM, playback, errors and responsive overflow. Preserve displayed text, binding attributes and whitespace-sensitive inline content during readability-only formatting; no visual redesign is intended.
+Offline checks cover bindings and step labels. Chrome checks actual explicit Run/local Replay, errors, pending safety, colors and responsive overflow.

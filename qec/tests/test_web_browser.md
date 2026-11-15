@@ -1,47 +1,28 @@
-# `test_web_browser.cjs` — opt-in Chrome replay regression
+# `test_web_browser.cjs` — real Chrome run/replay regression
 
-This CommonJS test drives a real isolated headless Chrome via the Chrome DevTools Protocol (CDP). It uses Node built-ins plus native `fetch` and `WebSocket` (Node 22+), not npm browser libraries. Successful simulation evidence is obtained from the supplied running server; only the explicit failure phase is synthetic.
+This opt-in test uses isolated headless Chrome and Node 22+ native fetch/WebSocket to drive CDP, without npm dependencies. Successful evidence comes from the real API; only the labeled 503 failure is synthetic.
 
-## Configuration and runnable verification
+## Run
 
-From the repository root, start a **simulation-only** server:
+From the repository root:
 
 ```sh
 uv run --with stim --with pymatching python -m qec.surface.web --port 18766
+# Separate terminal:
+QEC_WEB_URL=http://127.0.0.1:18766 node --test qec/tests/test_web_ui.cjs qec/tests/test_web_browser.cjs
 ```
 
-In another terminal:
+Use a simulation-only server without `--serial-port`; a hardware-backed URL can perform actual board transactions. The test does not own the supplied server. Without QEC_WEB_URL it skips. `CHROME` overrides google-chrome; `TMPDIR` selects the private profile parent. The test removes its profile and Chrome process at teardown. Optional `QEC_STALE_URL` supplies a separate incompatible-layout endpoint; no stale server is created here.
 
-```sh
-QEC_WEB_URL=http://127.0.0.1:18766 node --test qec/tests/test_web_browser.cjs
-# Or include offline tests in the same run:
-QEC_WEB_URL=http://127.0.0.1:18766 node --test qec/tests/*.cjs
-```
+## Harness and coverage
 
-Do not provide `--serial-port` for board-free verification. The test does not start/stop the web server; stop the server you started afterward. Without `QEC_WEB_URL`, its single test is explicitly skipped, not passed browser coverage.
+A correlated command map drives a target WebSocket; runtime exceptions are collected separately. Bounded semantic polling waits for controls/evidence. CDP Network records POST requests, while Fetch can fail a run or hold a real request for concurrency checks. A 30-second test timeout bounds execution; short delays settle CSS transitions.
 
-- `CHROME` overrides the executable (default `google-chrome`). It must accept Chrome headless/CDP flags. The test uses `--no-sandbox`, so run against a trusted local app, not arbitrary untrusted pages.
-- `TMPDIR` selects the temporary profile parent, falling back to `os.tmpdir()`. Each invocation gets an independent profile/cache, removed during cleanup.
-- Optional `QEC_STALE_URL` points to a separate server serving current assets but an incompatible old layout API. No such fixture server is created by this test. When absent, the stale-server branch is not exercised; offline schema tests still cover helper rejection.
+- Startup renders the 17-qubit fixed template, leaves Replay disabled and sends no POST. Assert default seed 20261107 and four rates of 0.001, then set rates to zero for deterministic visual assertions; editing still sends no POST.
+- Explicit Run sends `/api/run`. Initial Replay advances immediately to cursor 1, showing blue active H gates. The selected X q10@8 produces amber error, coral detector flips and host correction with mint tags/cleared detector cells. The corrected counterfactual has residual observable zero; an equivalent stabilizer frame need not be sitewise identity.
+- Backward scrub hides future measurements; replay from the end restarts. All replay activity leaves POST count unchanged. Clear, Example and lattice edits invalidate evidence without requests. A new explicit Run accepts the cleared configuration.
+- Inject a labeled 503, require actionable visible error/unavailable source/disabled Replay, then disable interception and recover through a real Run.
+- Hold a real Run request and assert Run, seed, lattice edits and Replay are disabled. A synthetic input bypassing disabled controls invalidates it; releasing the old reply cannot restore Replay. A new explicit run displays the updated seed.
+- Sweep 1280, 820, 760, 600, 390 and 360px for horizontal overflow and Replay visibility. Optionally verify incompatible-layout restart guidance at QEC_STALE_URL.
 
-## Harness structure
-
-`delay()` supports bounded polling and color-settle waits. The test spawns Chrome with an ephemeral debug port, reads its stderr endpoint, creates a target with HTTP PUT to `/json/new`, then connects the target's native WebSocket. Teardown hooks kill the owned Chrome, remove its profile and close the socket.
-
-A monotonically increasing command ID and `requests` map pair CDP responses with promises. `Runtime.exceptionThrown` events collect uncaught errors. `cdp()` sends protocol commands; `js()` evaluates expressions with `returnByValue`/`awaitPromise` and rejects expression exceptions; `until()` polls a semantic condition up to 150 times at 50ms intervals and includes body text on timeout. The entire test has a 30-second timeout. Short 150ms delays allow the stylesheet's 120ms color transitions to settle before computed-style assertions.
-
-## Interaction coverage
-
-- At 1280×900, wait for enabled Play and 17 qubits; click initial Play and assert immediate cursor `1 / 22`, visible H label and blue active-gate fill.
-- Confirm the explicit X q10@8 example, accelerate playback, observe amber error, coral detector flips, then the final **Host correction** label, mint correction, identity residual, two cleared detector cells and “Z preserved”.
-- Scrub backward to tick 13 and require future flips to disappear; replay from cursor 22 must restart immediately at cursor 1.
-- Clear faults, wait for a real fresh response, verify zero injected faults in evidence and a genuinely noiseless final display.
-- Intercept only `/api/simulate` with CDP Fetch and return a labeled JSON 503 (`Regression fixture: FPGA unavailable`). Assert visible error above the lattice, unavailable source and disabled Play. Disable interception and retry the example through the real server to verify recovery.
-- Sweep widths 1280, 820 and 390, asserting no horizontal overflow and Play inside the viewport.
-- If configured, navigate to the stale server and require the actionable restart message, disabled Play and unavailable source, without uncaught runtime errors.
-
-## Data and evidence boundary
-
-The server must expose `/`, `/app.js`, `/style.css`, `/api/layout` and `/api/simulate` with the contracts consumed by `app.js` (see `../surface/web_assets/app.md`). This test assumes the maintained d3 Z three-round teaching circuit, its 17 qubits, 22 physical tick frames and the default example's two detector flips. It is not a generic arbitrary-code UI test.
-
-The test validates UI projection of actual server responses, not independent correctness of Stim, the decoder or serial hardware. “Host correction”, cleared detectors and identity residual are counterfactual host replay evidence, not proof of physical correction or live feedback. The deliberately injected 503 proves failure handling only; its FPGA wording does not imply a board was accessed. A supplied FPGA-backed URL may contact hardware, so use the simulation command above when board use is prohibited.
+The test projects real server results but does not independently validate Stim, serial timing or hardware decoding. Host correction remains counterfactual evidence, not physical feedback.

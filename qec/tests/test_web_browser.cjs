@@ -9,7 +9,7 @@ const path = require("node:path");
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test(
-  "initial Play visibly runs gates, an explicit example fault, detectors and host correction",
+  "explicit Run creates evidence; Replay is local and edits invalidate it",
   {
     skip: !process.env.QEC_WEB_URL,
     timeout: 30000,
@@ -60,6 +60,8 @@ test(
     let id = 0;
     const requests = new Map();
     const errors = [];
+    const posts = [];
+    let holdRun = false, heldRequest;
     ws.onmessage = ({ data }) => {
       const message = JSON.parse(data);
       if (message.id) {
@@ -68,9 +70,15 @@ test(
         message.error
           ? entry.reject(Error(JSON.stringify(message.error)))
           : entry.resolve(message.result);
-      } else if (message.method === "Runtime.exceptionThrown")
+      } else if (message.method === "Network.requestWillBeSent" && message.params.request.method === "POST")
+        posts.push(message.params.request);
+      else if (message.method === "Runtime.exceptionThrown")
         errors.push(message.params.exceptionDetails.text);
       else if (message.method === "Fetch.requestPaused") {
+        if (holdRun) {
+          heldRequest = message.params.requestId;
+          return;
+        }
         // Explicit failure fixture only, never fabricated successful evidence.
         cdp("Fetch.fulfillRequest", {
           requestId: message.params.requestId,
@@ -110,6 +118,7 @@ test(
       assert.fail(`${description}: ${await js("document.body.innerText")}`);
     };
     await cdp("Runtime.enable");
+    await cdp("Network.enable");
     await cdp("Emulation.setDeviceMetricsOverride", {
       width: 1280,
       height: 900,
@@ -117,7 +126,18 @@ test(
       mobile: false,
     });
     await cdp("Page.navigate", { url: process.env.QEC_WEB_URL });
-    // Exercise initial Play itself instead of injecting a completed render state.
+    await until('document.getElementById("run") && !document.getElementById("run").disabled', "configuration ready");
+    assert.equal(await js('document.getElementById("play").disabled'), true);
+    await delay(200);
+    assert.equal(await js('document.getElementById("lattice").getBoundingClientRect().top < 650'), true, "configuration keeps the lattice prominent on desktop");
+    assert.equal(posts.length, 0, "page load must never run");
+    assert.equal(await js('document.getElementById("seed").value'), "20261107");
+    assert.deepEqual(await js('[...document.querySelectorAll(".settings input:not(#seed)")].map(e => e.value)'), ["0.001", "0.001", "0.001", "0.001"]);
+    // Zero the stochastic rates for deterministic visual/correction assertions.
+    await js('[...document.querySelectorAll(".settings input:not(#seed)")].forEach(e => {e.value="0";e.dispatchEvent(new Event("input"));})');
+    assert.equal(posts.length, 0, "settings edits must never run");
+    await js('document.getElementById("run").click()');
+    // Exercise Replay itself after the explicit run, not an injected render state.
     await until(
       'document.getElementById("play") && !document.getElementById("play").disabled && document.querySelectorAll(".qubit").length === 17',
       "ready",
@@ -173,16 +193,12 @@ test(
     await delay(150);
     assert.equal(
       await js(
-        'getComputedStyle(document.querySelector(".has-fix")).backgroundColor',
+        'getComputedStyle(document.querySelector(".has-fix small")).backgroundColor',
       ),
       "rgb(191, 230, 205)",
     );
-    assert.equal(
-      await js(
-        'document.querySelector(".has-fix").querySelector("b").textContent',
-      ),
-      "I",
-    );
+    // A valid representative may leave a stabilizer frame, not sitewise I.
+    assert.equal(await js('JSON.parse(document.getElementById("technical").textContent).residual_observable'), 0);
     assert.equal(
       await js('document.querySelectorAll(".detector.cleared").length'),
       2,
@@ -208,38 +224,32 @@ test(
       "1 / 22",
       "Play replays from completed state",
     );
+    await js('document.getElementById("play").click(); document.getElementById("back").click(); document.getElementById("step").click()');
+    assert.equal(await js('document.getElementById("play").textContent'), "Replay");
+    await delay(100);
+    assert.equal(posts.length, 1, "Replay, Pause, back/step, backward scrub and restart must never request decoding");
+    assert.match(posts[0].url, /\/api\/run$/);
+    assert.equal(JSON.parse(posts[0].postData).seed, 20261107);
     await js('document.getElementById("reset").click()');
-    await until(
-      '!document.getElementById("play").disabled',
-      "clear faults ready",
-    );
-    assert.match(
-      await js('document.getElementById("scenario").textContent'),
-      /No faults/,
-    );
-    assert.equal(
-      await js(
-        'JSON.parse(document.getElementById("technical").textContent).faults.length',
-      ),
-      0,
-    );
-    await js(
-      'document.getElementById("scrubber").value=22; document.getElementById("scrubber").dispatchEvent(new Event("input"))',
-    );
-    assert.equal(
-      await js(
-        'document.querySelectorAll(".has-error,.detector.fired,.has-fix").length',
-      ),
-      0,
-      "clear faults is genuinely a noiseless run",
-    );
+    assert.equal(await js('document.getElementById("play").disabled'), true);
+    assert.match(await js('document.getElementById("status").textContent'), /Run to update/);
+    assert.equal(await js('document.getElementById("technical").textContent'), "");
+    await delay(100);
+    assert.equal(posts.length, 1, "clear must never run");
+    await js('document.getElementById("example").click()');
+    await js('document.querySelector(".data-qubit").click()');
+    await delay(100);
+    assert.equal(posts.length, 1, "example and fault edits must never run");
+    await js('document.getElementById("reset").click(); document.getElementById("run").click()');
+    await until('!document.getElementById("play").disabled', "explicit clear run ready");
+    assert.equal(await js('JSON.parse(document.getElementById("technical").textContent).faults.length'), 0);
     assert.deepEqual(errors, []);
     // Remove usable evidence on failure, then recover through a real API request
     // after interception is removed. This also works with a simulation-only server.
     await cdp("Fetch.enable", {
-      patterns: [{ urlPattern: "*/api/simulate", requestStage: "Request" }],
+      patterns: [{ urlPattern: "*/api/run", requestStage: "Request" }],
     });
-    await js('document.getElementById("example").click()');
+    await js('document.getElementById("example").click(); document.getElementById("run").click()');
     await until(
       'document.getElementById("status").textContent.includes("Regression fixture: FPGA unavailable")',
       "source failure visible",
@@ -255,12 +265,29 @@ test(
       ),
     );
     await cdp("Fetch.disable");
-    await js('document.getElementById("example").click()');
+    await js('document.getElementById("example").click(); document.getElementById("run").click()');
     await until(
       '!document.getElementById("play").disabled',
       "source recovered",
     );
-    for (const width of [1280, 820, 390]) {
+    // Hold a real request to verify pending locks and late-response invalidation.
+    holdRun = true;
+    await cdp("Fetch.enable", { patterns: [{ urlPattern: "*/api/run", requestStage: "Request" }] });
+    await js('document.getElementById("run").click()');
+    for (let i = 0; !heldRequest && i < 100; i++) await delay(20);
+    assert.ok(heldRequest);
+    assert.equal(await js('document.getElementById("run").disabled && document.getElementById("seed").disabled && document.querySelector(".data-qubit").disabled && document.getElementById("play").disabled'), true);
+    // Synthetic input bypasses native disabled controls; even this must be safe.
+    await js('document.getElementById("seed").value="7"; document.getElementById("seed").dispatchEvent(new Event("input"))');
+    await cdp("Fetch.continueRequest", { requestId: heldRequest });
+    await cdp("Fetch.disable");
+    await delay(200);
+    assert.equal(await js('document.getElementById("play").disabled'), true, "stale response cannot restore replay");
+    assert.match(await js('document.getElementById("status").textContent'), /Run to update/);
+    await js('document.getElementById("run").click()');
+    await until('!document.getElementById("play").disabled', "run after stale reply");
+    assert.match(await js('document.getElementById("run-summary").textContent'), /seed 7.*prediction.*observable.*cycles/);
+    for (const width of [1280, 820, 760, 600, 390, 360]) {
       await cdp("Emulation.setDeviceMetricsOverride", {
         width,
         height: 900,
@@ -294,7 +321,7 @@ test(
       assert.deepEqual(errors, []);
     }
     console.log(
-      "Verified real API: moving ticks, blue H gates, X q10@8, two detector flips, I residual, replay and clear.",
+      "Verified real API: explicit Run, network-free Replay, edit invalidation, gate/error/correction states and recovery.",
     );
   },
 );

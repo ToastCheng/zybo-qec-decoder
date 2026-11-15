@@ -6,6 +6,23 @@ const fs = require("node:fs");
 const path = require("node:path");
 const app = path.join(__dirname, "../surface/web_assets/app.js");
 
+test("run settings use the fixed hardware-compatible template and independent noise rates", () => {
+  const { runSettings } = require(app);
+  const faults = [{ tick: 8, qubit: 10, pauli: "X" }];
+  const noise = {
+    after_clifford_depolarization: 0.001,
+    before_round_data_depolarization: 0.002,
+    before_measure_flip_probability: 0.003,
+    after_reset_flip_probability: 0.004,
+  };
+  assert.deepEqual(runSettings(noise, 20261107, faults), {
+    circuit: "surface_code:rotated_memory_z", distance: 3, rounds: 3,
+    noise, seed: 20261107, faults,
+  });
+  assert.throws(() => runSettings({ ...noise, after_clifford_depolarization: 0.76 }, 1, []), /0.*0.75/);
+  assert.throws(() => runSettings(noise, -1, []), /seed/i);
+});
+
 test("rejects stale server layouts with an actionable restart error", () => {
   const { validateLayout } = require(app);
   assert.throws(
@@ -121,4 +138,11 @@ test("minimal page exposes replay, fault time, speed and collapsed evidence", ()
     "load/API errors stay above the circuit",
   );
   assert.match(html, /id="play"[^>]*disabled/);
+  assert.match(html, /1 Configure/);
+  assert.match(html, /2 Simulate/);
+  assert.match(html, /3 Replay/);
+  for (const id of ["run", "circuit-template", "seed", "after_clifford_depolarization", "before_round_data_depolarization", "before_measure_flip_probability", "after_reset_flip_probability", "run-summary"]) {
+    assert.ok(html.includes(`id="${id}"`), id);
+  }
+  assert.match(html, /id="play"[^>]*>Replay/);
 });

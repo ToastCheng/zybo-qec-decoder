@@ -399,6 +399,81 @@ pre {
   padding: 16px;
   max-width: 100%;
 }
+/* Configure/run/replay remain distinct without competing with the lattice. */
+.workflow-step {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+}
+.workflow-step h2, .replay > h2 {
+  margin-bottom: 12px;
+}
+.settings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin-bottom: 14px;
+}
+.settings label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+.settings input, .settings select {
+  width: 100%;
+  min-width: 0;
+}
+.template, .settings label:nth-child(2) {
+  grid-column: span 2;
+}
+.toolbar {
+  margin-bottom: 0;
+  gap: 10px 14px;
+}
+#scenario {
+  width: auto;
+  flex: 1 1 240px;
+}
+.replay {
+  padding: 12px 0;
+}
+#scenario, #run-summary {
+  overflow-wrap: anywhere;
+}
+.run-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.run-step h2 {
+  margin: 0;
+}
+#run {
+  background: var(--dark);
+  color: white;
+  min-width: 90px;
+}
+#run-summary {
+  flex: 1 1 300px;
+  margin: 0;
+  font: 11px/1.7 var(--mono);
+}
+.transport {
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .template {
+    grid-column: 1 / -1;
+  }
+  .run-step h2 {
+    flex-basis: 100%;
+  }
+}
 /* Stack panels on narrow screens; transport stays above the workspace. */
 @media (max-width: 760px) {
   main {
