@@ -55,37 +55,6 @@ directory if it is outside Vivado's board search paths.
 Connect the powered board through its PROG/UART USB port and grant your account
 serial-device access.
 
-## Interactive circuit replay (no board required)
-
-After the Python setup above, launch from the repository root:
-
-```sh
-python -m qec.surface.web --port 8765
-```
-
-Open **http://127.0.0.1:8765/**. Scrub any circuit tick, step backward/forward,
-or play at an adjustable speed. Select a fault tick and X, Y, or Z, then click
-data qubits. Multiple fault times are supported. Detector flips appear only
-at their measurement boundaries; the final step shows the **Host correction**
-overlay. **Details** contains the actual Stim circuits and decoder evidence.
-
-To use an already loaded **d3 Z / 3-round surface decoder**, add
-`--serial-port /dev/ttyUSB1` (use your actual UART path). The source is explicitly
-**Simulated** or **FPGA**; port/protocol failures are shown without software
-fallback. This command does not program or reset the board. FPGA replies supply
-logical prediction and measured cycles, not physical gates or graph edges.
-The returned prediction updates the host logical frame; the Pauli overlay and
-independent counterfactual replay remain host-derived, not live quantum feedback.
-A cleared syndrome alone does not establish logical recovery.
-
-The server binds only to loopback; stop it with Ctrl+C. No frontend build is
-needed. Regression checks (Node.js is needed only for browser-state tests):
-
-```sh
-python -m pytest qec/tests/test_web.py -q
-node --test qec/tests/test_web_ui.cjs
-```
-
 ## Quick start: manually decode a complete window
 
 Run all commands from the repository root. The example uses a distance-3
@@ -258,6 +227,41 @@ The board run adds:
 The example regenerates the shot from section 2 and sends its detector bits to
 the loaded surface decoder. It prints the reply, checks the prediction against
 the Python reference and checks that the cycle count is positive.
+
+## 7. Visualize the circuit and decoding result
+
+With the d3 Z / 3-round surface decoder still loaded from steps 5–6, start the
+local web server using the same UART port:
+
+```sh
+python -m qec.surface.web --port 8765 --serial-port "$PORT"
+```
+
+Open **http://127.0.0.1:8765/**. Select a fault tick and X, Y, or Z, then click
+data qubits, or use the example fault. The Python server simulates the selected
+faults with Stim, sends the resulting detector bits to the FPGA and returns a
+trace for the browser to replay. It generates a new shot for those faults;
+it does not import the output from step 6.
+
+Scrub circuit ticks, step backward or forward, or play at an adjustable speed.
+Detector flips appear at their measurement boundaries; the final step shows the
+**Host correction** overlay. Open **Details** to inspect the Stim circuits,
+FPGA prediction, measured cycles and request/reply bytes.
+
+The FPGA returns a logical-flip prediction and measured cycles. The Python server
+computes the graph edges and Pauli overlay and independently simulates a circuit
+with that correction for comparison. The animation does not execute physical
+corrections or provide live quantum feedback; a cleared syndrome alone does not
+establish logical recovery.
+
+For software-only visualization after step 2, omit `--serial-port "$PORT"` and
+skip the board build/load/run steps. The server then runs Stim and the Python
+union-find decoder, and the page labels the source **Simulated** rather than
+**FPGA**. Serial or protocol failures in FPGA mode appear as errors without
+software fallback.
+
+The server binds only to loopback and does not program or reset the board. No
+frontend build is needed. Stop it with Ctrl+C before using the UART elsewhere.
 
 ## Restricted logical compiler
 
