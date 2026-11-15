@@ -21,7 +21,7 @@ help:
 	  'make reports MODE=core|uart; make netlist (after MODE=core)' \
 	  'Activate qec/.venv first; see README for setup and transport details.'
 test:
-	$(PYTHON) -m pytest qec/tests -q
+	$(PYTHON) -m pytest qec/tests scripts/test_source_docs.py -q
 example:
 	$(PYTHON) -m qec.surface.example
 sim:

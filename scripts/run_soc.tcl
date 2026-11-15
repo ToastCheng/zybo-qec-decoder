@@ -5,8 +5,8 @@
 # Usage (from the repository root):
 #   xsct scripts/run_soc.tcl <bitstream> <elf> [xsa]
 # e.g.
-#   xsct scripts/run_soc.tcl build/ps_hello.bit \
-#       build/vitis_ws/ps_hello_app/build/ps_hello_app.elf build/ps_hello.xsa
+#   xsct scripts/run_soc.tcl build/surface_soc.bit \
+#       build/vitis_ws/surface_app/build/surface_app.elf build/surface_soc.xsa
 #
 # Requires the board to be connected and powered, and hw_server to be
 # reachable (xsct starts one automatically if none is running).

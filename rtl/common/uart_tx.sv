@@ -13,14 +13,16 @@
 module uart_tx #(
     parameter int CLK_FREQ_HZ = 125_000_000,
     parameter int BAUD_RATE   = 115_200
-)(
-    input  logic clk,
-    input  logic start,        // one-cycle pulse to begin transmission
-    input  logic [7:0] data,   // byte to transmit
-    output logic tx,           // serial transmit line
-    output logic busy          // high while transmitting
+) (
+    input  logic       clk,
+    input  logic       start,
+    input  logic [7:0] data,
+    output logic       tx,
+    output logic       busy
 );
 
+    // start is accepted only in IDLE. Pulses while busy are dropped, not queued.
+    // No reset port: state/timers rely on FPGA register initialization.
     localparam int TICKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
     localparam int TIMER_WIDTH   = $clog2(TICKS_PER_BIT);
 
@@ -82,6 +84,7 @@ module uart_tx #(
         endcase
     end
 
+    // Serial output follows state; data_reg freezes the accepted byte through STOP.
     always_comb begin
         case (state)
             IDLE:  tx = 1'b1;

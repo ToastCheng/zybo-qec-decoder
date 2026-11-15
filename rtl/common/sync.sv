@@ -11,12 +11,14 @@
 
 module sync #(
     parameter int STAGES = 2
-)(
+) (
     input  logic clk,
     input  logic din,
     output logic dout
 );
 
+    // No reset or debounce: dout is unknown until STAGES clock edges have sampled din.
+    // This slice requires STAGES >= 2; use only for single-bit level crossings.
     logic [STAGES-1:0] shift_reg;
 
     always_ff @(posedge clk) begin

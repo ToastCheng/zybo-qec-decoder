@@ -2,6 +2,8 @@
 
 // Incoming framing-error rejection and recovery, without a reset or error port.
 module tb_uart_rx_framing;
+    // 32 clocks/bit leaves synchronizer latency well inside the sampling margin.
+    // A low stop byte must be dropped; the next valid frame works without reset.
     localparam int TICKS_PER_BIT = 32;
     logic clk = 0;
     logic rx = 1;
@@ -12,8 +14,14 @@ module tb_uart_rx_framing;
     logic [7:0] expected = 8'h3C;
 
     always #5 clk = ~clk;
-    uart_rx #(.CLK_FREQ_HZ(3_200_000), .BAUD_RATE(100_000)) dut (
-        .clk(clk), .rx(rx), .data(data), .valid(valid)
+    uart_rx #(
+        .CLK_FREQ_HZ(3_200_000),
+        .BAUD_RATE  (100_000)
+    ) dut (
+        .clk(clk),
+        .rx(rx),
+        .data(data),
+        .valid(valid)
     );
 
     // Observe outputs after NBA updates; stimulus changes only on falling edges.
@@ -40,7 +48,7 @@ module tb_uart_rx_framing;
     endtask
 
     initial begin
-        repeat (2*TICKS_PER_BIT) @(negedge clk);
+        repeat (2 * TICKS_PER_BIT) @(negedge clk);
         // Reproduces review finding: valid data bits but a LOW stop bit.
         send_frame(8'hA5, 0);
         send_bit(1);

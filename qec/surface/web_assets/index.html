@@ -13,6 +13,8 @@
       <span id="source">Connecting…</span>
     </header>
     <main>
+      <!-- IDs/data-pauli are app.js bindings. Transport remains disabled until
+           a compatible layout and replay arrive. -->
       <div class="toolbar">
         <fieldset>
           <legend>Inject</legend>
@@ -29,12 +31,14 @@
         <span class="code">d3 · Z · 3 rounds</span>
         <span id="scenario">Example · X on q10 at tick 8</span>
       </div>
+      <!-- Keep transport/status before the workspace, outside collapsed evidence. -->
       <div class="replay">
         <div class="transport">
           <button id="back" aria-label="Previous tick" disabled>←</button>
           <button id="play" disabled>Play</button>
           <button id="step" aria-label="Next tick" disabled>→</button>
-          <label>Speed
+          <label
+            >Speed
             <select id="speed">
               <option value="0.5">0.5×</option>
               <option value="1" selected>1×</option>
@@ -44,9 +48,20 @@
           </label>
           <output id="position">0 / 22</output>
         </div>
-        <input id="scrubber" type="range" min="0" max="22" value="0" step="1" aria-label="Circuit tick" disabled />
+        <input
+          id="scrubber"
+          type="range"
+          min="0"
+          max="22"
+          value="0"
+          step="1"
+          aria-label="Circuit tick"
+          disabled
+        />
       </div>
       <div id="status" role="status" aria-live="polite">Loading…</div>
+      <!-- app.js rebuilds qubits and detector cells at the selected replay tick,
+           including when scrubbing backward across measurement boundaries. -->
       <div class="workspace">
         <section class="physical" aria-label="Circuit replay">
           <div class="section-head">
@@ -74,6 +89,7 @@
         </section>
       </div>
 
+      <!-- Server evidence and host counterfactuals, not live gate telemetry. -->
       <details id="evidence">
         <summary>Details</summary>
         <p>

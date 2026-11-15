@@ -1,13 +1,19 @@
+"""Exhaustive repetition-LUT prediction and detector-bit-order regression."""
+
 import importlib.util
 from pathlib import Path
 import sys
 import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def test_lut_matches_all_pymatching_syndromes():
-    assert importlib.util.find_spec('decoder') is not None, 'decoder module not implemented'
+    assert importlib.util.find_spec("decoder") is not None, (
+        "decoder module not implemented"
+    )
     import decoder
+
     circuit, matching = decoder.model(0.001)
     assert circuit.num_detectors == 8
     assert circuit.num_observables == 1

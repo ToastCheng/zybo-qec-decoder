@@ -5,7 +5,7 @@
 # Usage:
 #   vivado -mode batch -source scripts/build_soc.tcl -tclargs <top_module>
 #
-# Unlike the pure-PL build (build.tcl, non-project mode), SoC designs use a
+# Unlike the pure-PL report flow (qec_build.tcl), SoC designs use a
 # block design for the Zynq PS7, which requires project mode.  The generated
 # project lives under build/ and is regenerated on every run.
 #
@@ -45,7 +45,9 @@ if {[info exists ::env(QEC_BOARD_REPO)]} {
     set_param board.repoPaths [list [file normalize $::env(QEC_BOARD_REPO)]]
 } elseif {[info exists ::env(XILINX_VIVADO)]} {
     set boards [file normalize [file join $::env(XILINX_VIVADO) .. data boards board_files]]
-    if {[file isdirectory $boards]} {set_param board.repoPaths [list $boards]}
+    if {[file isdirectory $boards]} {
+        set_param board.repoPaths [list $boards]
+    }
 }
 
 # Output directories.

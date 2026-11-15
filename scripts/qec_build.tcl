@@ -2,9 +2,15 @@
 set root [file normalize [file join [file dirname [info script]] ..]]
 cd $root
 set mode [lindex $argv 0]
-if {$mode eq ""} {set mode uart}
-if {$mode ni {core uart}} {error "usage: qec_build.tcl -tclargs core|uart"}
-if {![file exists qec/lut.mem]} {error "Generate real qec/lut.mem first"}
+if {$mode eq ""} {
+    set mode uart
+}
+if {$mode ni {core uart}} {
+    error "usage: qec_build.tcl -tclargs core|uart"
+}
+if {![file exists qec/lut.mem]} {
+    error "Generate real qec/lut.mem first"
+}
 set part xc7z010clg400-1
 set out build/qec_$mode
 file mkdir $out
@@ -40,11 +46,17 @@ report_timing_summary -report_unconstrained -file $out/post_route_timing.rpt
 report_drc -file $out/post_route_drc.rpt
 write_checkpoint -force $out/post_route.dcp
 set paths [get_timing_paths -max_paths 1 -setup]
-if {[llength $paths]==0} {error "No setup timing path reported"}
+if {[llength $paths] == 0} {
+    error "No setup timing path reported"
+}
 set slack [get_property SLACK [lindex $paths 0]]
 set hold_paths [get_timing_paths -max_paths 1 -hold]
-if {[llength $hold_paths]==0} {error "No hold timing path reported"}
+if {[llength $hold_paths] == 0} {
+    error "No hold timing path reported"
+}
 set hold_slack [get_property SLACK [lindex $hold_paths 0]]
 puts "QEC_IMPLEMENTATION_COMPLETE mode=$mode WNS_NS=$slack WHS_NS=$hold_slack reports=$out"
-if {$slack<0 || $hold_slack<0} {error "QEC setup/hold timing failed"}
+if {$slack < 0 || $hold_slack < 0} {
+    error "QEC setup/hold timing failed"
+}
 # Intentionally no write_bitstream, hardware server, programming or board access.

@@ -1,4 +1,4 @@
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # build_app.py
 # Standalone QEC firmware build (Vitis unified, 2025.2).
 #
@@ -8,7 +8,7 @@
 # Creates a standalone (bare-metal) platform from build/qec_soc.xsa, creates
 # the qec application, drops our source in, and builds the ELF.
 # All generated files live under build/vitis_ws/ (git-ignored).
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 import glob
 import os
@@ -28,14 +28,16 @@ if not os.path.exists(XSA):
 client = vitis.create_client()
 client.set_workspace(path=WORKSPACE)
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Platform: standalone OS on the first Cortex-A9 core.
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 try:
     client.delete_component(name=PLATFORM_NAME)
 except Exception:
-    pass  # platform does not exist yet
+    # Also catches missing-component errors; other cleanup errors are not
+    # classified, so later creation/build can still fail.
+    pass
 
 platform = client.create_platform_component(
     name=PLATFORM_NAME,
@@ -51,16 +53,16 @@ xpfm = glob.glob(
 if not xpfm:
     sys.exit("ERROR: platform export (.xpfm) not found after platform build")
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Application: create from the hello_world template (the standalone domain
 # has no "empty" template), swap in our source so vitis/qec/src/main.c
 # stays the single source of truth, and build.
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 try:
     client.delete_component(name=APP_NAME)
 except Exception:
-    pass  # app does not exist yet
+    pass  # Best-effort deletion; not evidence that cleanup succeeded.
 
 app = client.create_app_component(
     name=APP_NAME,

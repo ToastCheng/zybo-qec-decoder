@@ -4,6 +4,25 @@ A standalone QEC decoder project for the **Digilent Zybo Z7-10**
 (`xc7z010clg400-1`), with Stim-generated inputs, FPGA decoding, and host-side
 verification. This repository uses **`main`**.
 
+## Source walkthroughs
+
+Every maintained source file has a Markdown walkthrough beside it, using the same
+basename: for example, [`qec_decoder.sv`](rtl/common/qec_decoder.sv) and
+[`qec_decoder.md`](rtl/common/qec_decoder.md). Each walkthrough explains the
+file's interfaces, control flow, invariants and verification commands.
+
+Start with the [surface decoder](rtl/common/surface_decoder.md),
+[PS/PL mailbox](rtl/common/surface_ps_bridge.md),
+[ARM firmware](vitis/surface/src/main.md), or
+[host transport](qec/surface/host.md). Build entry points are covered in the
+[Makefile guide](Makefile.md) and [SoC build guide](scripts/build_soc.md).
+
+Source uses four-space indentation (Make recipes retain required tabs), expanded
+control flow and comments for protocol, state-machine and timing assumptions.
+Keep a source's sibling walkthrough current when changing it. `make test` checks
+that every maintained source has one; archived results and fixture snapshots are
+excluded.
+
 ## Prerequisites
 
 ### Python

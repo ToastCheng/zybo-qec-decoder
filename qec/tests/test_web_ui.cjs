@@ -1,3 +1,5 @@
+// Offline state/schema checks: importing app.js exports helpers without DOM
+// setup. These tests do not exercise fetch, CSS, browser timers or hardware.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -6,21 +8,43 @@ const app = path.join(__dirname, "../surface/web_assets/app.js");
 
 test("rejects stale server layouts with an actionable restart error", () => {
   const { validateLayout } = require(app);
-  assert.throws(() => validateLayout({ data: [], checks: [], detectors: [] }), /restart.*server/i);
-  assert.throws(() => validateLayout({ ticks: [], data: [], checks: [], detectors: [] }), /restart.*server/i);
-  const layout = { ticks: [{ operations: [] }], data: [], checks: [], detectors: [] };
+  assert.throws(
+    () => validateLayout({ data: [], checks: [], detectors: [] }),
+    /restart.*server/i,
+  );
+  assert.throws(
+    () => validateLayout({ ticks: [], data: [], checks: [], detectors: [] }),
+    /restart.*server/i,
+  );
+  const layout = {
+    ticks: [{ operations: [] }],
+    data: [],
+    checks: [],
+    detectors: [],
+  };
   assert.equal(validateLayout(layout), layout);
 });
 
 test("rejects stale replay schema instead of breaking the render loop", () => {
   const { validateReplay } = require(app);
-  assert.throws(() => validateReplay({ detector_indices: [] }, 2), /restart.*server/i);
-  assert.throws(() => validateReplay({ detector_indices: [], trace: [{ pauli_frame: {} }] }, 2), /restart.*server/i);
-  const result = { detector_indices: [], trace: [{ pauli_frame: {} }, { pauli_frame: {} }] };
+  assert.throws(
+    () => validateReplay({ detector_indices: [] }, 2),
+    /restart.*server/i,
+  );
+  assert.throws(
+    () =>
+      validateReplay({ detector_indices: [], trace: [{ pauli_frame: {} }] }, 2),
+    /restart.*server/i,
+  );
+  const result = {
+    detector_indices: [],
+    trace: [{ pauli_frame: {} }, { pauli_frame: {} }],
+  };
   assert.equal(validateReplay(result, 2), result);
 });
 
 test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults", () => {
+  // Include the extra host-overlay position and independent times on one qubit.
   const { LabState } = require(app);
   const s = new LabState(21);
   assert.equal(s.tick, 0);
@@ -49,6 +73,7 @@ test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults"
 });
 
 test("detectors stay unavailable before their measurement boundary, including backward scrub", () => {
+  // Availability is recomputed, not latched by visiting a later tick.
   const { visibleDetectors } = require(app);
   const ds = [
     { id: 0, available_tick: 7 },
@@ -60,6 +85,7 @@ test("detectors stay unavailable before their measurement boundary, including ba
 });
 
 test("minimal page exposes replay, fault time, speed and collapsed evidence", () => {
+  // Source-level hooks/order only; computed styles need the real-browser test.
   const html = fs.readFileSync(
     path.join(path.dirname(app), "index.html"),
     "utf8",
@@ -86,7 +112,13 @@ test("minimal page exposes replay, fault time, speed and collapsed evidence", ()
   assert.ok(!html.includes("See an error become"));
   assert.ok(!html.includes("<footer>"));
   assert.ok(html.includes("Host correction"));
-  assert.ok(html.indexOf('id="play"') < html.indexOf('id="lattice"'), 'Play stays above the circuit');
-  assert.ok(html.indexOf('id="status"') < html.indexOf('id="lattice"'), 'load/API errors stay above the circuit');
+  assert.ok(
+    html.indexOf('id="play"') < html.indexOf('id="lattice"'),
+    "Play stays above the circuit",
+  );
+  assert.ok(
+    html.indexOf('id="status"') < html.indexOf('id="lattice"'),
+    "load/API errors stay above the circuit",
+  );
   assert.match(html, /id="play"[^>]*disabled/);
 });

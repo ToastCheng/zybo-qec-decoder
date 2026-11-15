@@ -1,3 +1,4 @@
+/* Shared palette/type; state colors are checked by the browser regression. */
 :root {
   --paper: #f2f2ed;
   --ink: #202b2a;
@@ -123,6 +124,7 @@ label {
 }
 .workspace {
   display: grid;
+  /* Zero-minimum tracks prevent long content from forcing page overflow. */
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   border: 1px solid var(--line);
   background: var(--panel);
@@ -150,6 +152,7 @@ h2 {
 }
 #lattice {
   position: relative;
+  /* Percentage-positioned buttons and the 720-unit CX SVG scale together. */
   aspect-ratio: 1;
   max-width: 470px;
   margin: auto;
@@ -200,6 +203,8 @@ h2 {
   border-radius: 4px;
   cursor: default;
 }
+/* State precedence is intentional: error overrides active, correction overrides
+   error, then nonidentity residual restores amber. Do not reorder casually. */
 .qubit.active {
   background: #adddf6;
   color: #153c55;
@@ -276,6 +281,7 @@ h2 {
 }
 #timeline {
   display: grid;
+  /* One check-label column plus four measurement-boundary columns, not ticks. */
   grid-template-columns: 44px repeat(4, minmax(0, 1fr));
   gap: 5px;
   margin: 0 18px 16px;
@@ -310,6 +316,8 @@ h2 {
 .detector b {
   font: 12px var(--mono);
 }
+/* Unavailable differs from measured zero. Cleared denotes host replay, not an
+   actual detector measurement being erased on the device. */
 .detector[data-available="false"] {
   opacity: 0.5;
 }
@@ -381,6 +389,7 @@ details p {
   color: var(--muted);
   font-size: 12px;
 }
+/* Raw JSON/circuits scroll inside evidence rather than widening the page. */
 pre {
   overflow: auto;
   max-height: 350px;
@@ -390,6 +399,7 @@ pre {
   padding: 16px;
   max-width: 100%;
 }
+/* Stack panels on narrow screens; transport stays above the workspace. */
 @media (max-width: 760px) {
   main {
     padding: 16px;
@@ -437,6 +447,8 @@ pre {
     font-size: 10px;
   }
 }
+/* Cosmetic interpolation only; JS controls replay ticks and detector gating.
+   Reduced motion removes transitions, not replay progression. */
 @media (prefers-reduced-motion: no-preference) {
   .qubit,
   .detector {

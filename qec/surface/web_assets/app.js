@@ -1,4 +1,7 @@
 "use strict";
+
+// Local editing/transport state only. Physical frames and decoder evidence come
+// from the server; moving the cursor never advances a decoder or contacts a board.
 class LabState {
   constructor(lastTick = 21) {
     this.lastTick = lastTick;
@@ -9,6 +12,7 @@ class LabState {
     this.tick = 0;
   }
   seek(tick) {
+    // The extra position is a host-correction overlay, not another circuit tick.
     this.tick = Math.max(0, Math.min(this.lastTick + 1, Math.round(tick)));
   }
   next() {
@@ -18,6 +22,7 @@ class LabState {
     this.seek(this.tick - 1);
   }
   toggle(qubit, pauli, tick = Math.min(this.tick, this.lastTick)) {
+    // One fault per (tick, qubit): repeat removes it, a different Pauli replaces it.
     const i = this.faults.findIndex(
       (f) => f.tick === tick && f.qubit === qubit,
     );
@@ -28,32 +33,55 @@ class LabState {
     this.faults.push({ tick, qubit, pauli });
   }
 }
+// Recompute from the cursor so backward scrub hides future measurements.
 const visibleDetectors = (detectors, indices, tick) =>
   indices.filter(
     (i) => detectors.find((d) => d.id === i).available_tick <= tick,
   );
+// Compatibility guards catch older servers, not every malformed field. The
+// server remains responsible for full circuit/input validation.
 function validateLayout(data) {
-  if (!Array.isArray(data.ticks) || !data.ticks.length ||
-      !data.ticks.every((t) => Array.isArray(t.operations)) ||
-      !Array.isArray(data.data) || !Array.isArray(data.checks) ||
-      !Array.isArray(data.detectors) ||
-      !data.detectors.every((d) => Number.isInteger(d.available_tick))) {
-    throw Error("Incompatible replay API. Restart the QEC web server, then reload this page.");
+  if (
+    !Array.isArray(data.ticks) ||
+    !data.ticks.length ||
+    !data.ticks.every((t) => Array.isArray(t.operations)) ||
+    !Array.isArray(data.data) ||
+    !Array.isArray(data.checks) ||
+    !Array.isArray(data.detectors) ||
+    !data.detectors.every((d) => Number.isInteger(d.available_tick))
+  ) {
+    throw Error(
+      "Incompatible replay API. Restart the QEC web server, then reload this page.",
+    );
   }
   return data;
 }
 function validateReplay(data, tickCount) {
-  if (!Array.isArray(data.detector_indices) || !Array.isArray(data.trace) ||
-      data.trace.length !== tickCount || !data.trace.every((t) => t.pauli_frame && typeof t.pauli_frame === "object")) {
-    throw Error("Incompatible replay API. Restart the QEC web server, then reload this page.");
+  if (
+    !Array.isArray(data.detector_indices) ||
+    !Array.isArray(data.trace) ||
+    data.trace.length !== tickCount ||
+    !data.trace.every((t) => t.pauli_frame && typeof t.pauli_frame === "object")
+  ) {
+    throw Error(
+      "Incompatible replay API. Restart the QEC web server, then reload this page.",
+    );
   }
   return data;
 }
+// Export pure helpers for Node without executing browser setup.
 if (typeof module !== "undefined")
-  module.exports = { LabState, visibleDetectors, validateLayout, validateReplay };
+  module.exports = {
+    LabState,
+    visibleDetectors,
+    validateLayout,
+    validateReplay,
+  };
 
 if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
+  // A new request clears old evidence. Monotonic IDs prevent a late response
+  // overwriting a newer edit; requests themselves are not aborted.
   let layout,
     state,
     result,
@@ -88,6 +116,8 @@ if (typeof document !== "undefined") {
     render();
   }
   function advance() {
+    // Play advances immediately. Speed affects the next scheduled delay, not
+    // circuit physics or server-side decoder execution.
     state.next();
     render();
     if (state.tick > state.lastTick) {
@@ -122,6 +152,7 @@ if (typeof document !== "undefined") {
   });
   const combine = (a, b) =>
     !a ? b || "" : !b ? a : a === b ? "" : "XYZ".replace(a, "").replace(b, "");
+  // combine above multiplies Paulis modulo global phase for residual display.
   function render() {
     if (!layout) return;
     const focused = document.activeElement?.dataset.qubit;
@@ -131,6 +162,8 @@ if (typeof document !== "undefined") {
     const visible = result
       ? visibleDetectors(layout.detectors, result.detector_indices, tick)
       : [];
+    // Server trace frames are post-operation. Only the extra final position
+    // adds the host-derived correction; this is not physical feedback.
     const frame = result?.trace[tick].pauli_frame || {};
     const fixes = corrected ? result?.correction_frame || {} : {};
     $("tick-label").textContent = corrected
@@ -156,6 +189,7 @@ if (typeof document !== "undefined") {
     const byId = new Map(
       [...layout.data, ...layout.checks].map((q) => [q.id, q]),
     );
+    // CX targets arrive as ordered control/target pairs in one flattened list.
     const links = operations
       .filter((op) => op.name === "CX")
       .flatMap((op) => {
@@ -192,7 +226,11 @@ if (typeof document !== "undefined") {
           ? `Data qubit ${q.id}, ${fault || "I"}${fix ? ", host correction " + fix : ""}. Inject ${pauli} at tick ${$("fault-tick").value}`
           : `${q.basis} check ${q.id}${fired ? ", detector flip" : ""}`,
       );
-      const gates = corrected ? [] : operations.filter((op) => op.targets.includes(q.id)).map((op) => op.name);
+      const gates = corrected
+        ? []
+        : operations
+            .filter((op) => op.targets.includes(q.id))
+            .map((op) => op.name);
       button.innerHTML = `<span>${data ? "q" : q.basis}${q.id}</span><b>${corrected ? residual || (data ? "I" : "·") : fault || (fired ? "1" : "·")}</b>${gates.length ? `<em>${gates.join("/")}</em>` : ""}${fix ? `<small>+${fix}</small>` : ""}`;
       if (data) {
         const selected = state.faults.some(
@@ -219,10 +257,12 @@ if (typeof document !== "undefined") {
       }
       $("lattice").append(button);
     }
+    // Rebuilding buttons must not lose the selected qubit's keyboard focus.
     if (focused)
       document
         .querySelector(`[data-qubit="${focused}"]`)
         ?.focus({ preventScroll: true });
+    // Four detector-time columns represent measurement boundaries, not ticks.
     let html =
       "<span></span>" +
       [0, 1, 2, 3]
@@ -265,6 +305,8 @@ if (typeof document !== "undefined") {
     $("scenario").textContent = !state.faults.length
       ? "No faults · click a data qubit to inject"
       : `${state.faults.length === 1 && state.faults[0].tick === 8 && state.faults[0].qubit === 10 && state.faults[0].pauli === "X" ? "Example" : "Injected"} · ${state.faults.map((f) => `${f.pauli} on q${f.qubit} at tick ${f.tick}`).join(" · ")}`;
+    // Even with FPGA prediction/cycles, edges and representative Pauli/circuit
+    // replay are host-derived. Preserve provenance alongside raw evidence.
     $("technical").textContent = result
       ? JSON.stringify(
           {
@@ -289,6 +331,8 @@ if (typeof document !== "undefined") {
     $("circuit").textContent = result?.injected_circuit || "";
     $("corrected-circuit").textContent = result?.corrected_circuit || "";
   }
+  // Selection/cursor changes redraw only. Fault edits/example/reset request a
+  // fresh complete-window simulation; playback traverses that response locally.
   document.querySelectorAll("[data-pauli]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -335,6 +379,7 @@ if (typeof document !== "undefined") {
     simulate();
   };
   document.addEventListener("keydown", (e) => {
+    // Leave native controls, text entry and modified browser shortcuts alone.
     if (
       e.ctrlKey ||
       e.metaKey ||
@@ -354,6 +399,7 @@ if (typeof document !== "undefined") {
       $("play").click();
     }
   });
+  // Start with the explicit X q10@8 example, not hidden background noise.
   api("/api/layout")
     .then((data) => {
       layout = validateLayout(data);
