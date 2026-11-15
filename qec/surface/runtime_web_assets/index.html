@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Runtime circuit lab</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body><main>
+<header><h1>Runtime circuit lab</h1><span id="source">Connecting</span></header>
+<p class="note">Detector-annotated physical Clifford circuits · not logical fault-tolerant synthesis</p>
+<label for="circuit">Stim circuit</label><textarea id="circuit" spellcheck="false" aria-label="Detector annotated Stim circuit"></textarea>
+<details><summary>Optional compatible noisy reference</summary><textarea id="reference" spellcheck="false" aria-label="Compatible noisy reference"></textarea><p>Required when the experiment has no nonzero graph. Noiseless operations and annotations must match.</p></details>
+<div class="controls"><label>Seed <input id="seed" type="number" value="123" min="0" max="9007199254740991" step="1"></label><label>Added gate depolarization <input id="noise" type="number" value="0" min="0" max="0.75" step="0.001"></label><button id="run" disabled>Run simulation + decode</button></div>
+<p id="status" role="status" data-state="idle">Loading circuit…</p>
+<section aria-label="Completed shot replay"><div class="controls"><button id="play" disabled>Replay</button><button id="pause" disabled>Pause</button><button id="step" disabled>Step</button><label>Playback speed <select id="speed"><option value="700">1×</option><option value="1400">0.5×</option><option value="250">3×</option></select></label></div>
+<label for="scrub">Circuit tick <output id="tick">—</output></label><input id="scrub" type="range" min="0" max="0" value="0" disabled>
+<h2>Circuit replay</h2><p class="note">Wires are qubit indices, not device geometry. Highlighted columns are the current TICK; gates have executed at this frame.</p><div id="diagram-notice" class="note"></div><div id="diagram-scroll" tabindex="0" role="region" aria-label="Scrollable circuit wire and gate diagram"><svg id="circuit-diagram" role="img" aria-label="Submitted circuit"></svg></div><p class="note">Sampled Pauli errors: X orange · Y purple · Z blue · I neutral. These are not corrections.</p><div id="qubits" aria-label="Sampled Pauli frame"></div><details><summary>Active Stim operations</summary><pre id="gates" aria-label="Active operations"></pre></details><h3>Detector bits (separate from qubit wires)</h3><div id="detectors" aria-label="Available detector events"></div><p id="result"></p></section>
+<details id="circuit-evidence"><summary>Circuit evidence</summary><pre id="circuit-data"></pre></details>
+<details id="graph-evidence"><summary>Graph evidence</summary><pre id="graph-data"></pre></details>
+<details id="wire-evidence"><summary>Transport evidence</summary><pre id="wire-data"></pre></details>
+<p class="note">Replay is local: no simulation or decoder requests. Pauli frames are sampled simulation state, not physical corrections. Predictions are observable masks from an unweighted graph decoder; FPGA cycles appear only for FPGA results.</p>
+</main></body></html>
