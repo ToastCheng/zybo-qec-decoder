@@ -1,0 +1,5 @@
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/home/toastcheng/dev/zybo-qec-decoder/rtl/common/runtime_surface_decoder.sv" into library work
+INFO: [VRFC 10-311] analyzing module runtime_surface_decoder
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "/home/toastcheng/dev/zybo-qec-decoder/rtl/tb/tb_runtime_core.sv" into library work
+INFO: [VRFC 10-311] analyzing module tb_runtime_core
+INFO: [VRFC 10-311] analyzing module runtime_parameter_probe

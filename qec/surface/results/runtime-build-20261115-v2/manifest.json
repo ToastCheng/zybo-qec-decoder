@@ -1,0 +1,46 @@
+{
+  "scope": "Routed runtime image and matching ARM firmware build; no physical-board execution",
+  "board_programmed": false,
+  "capacities": {
+    "detectors": 128,
+    "edges": 512,
+    "observables": 32
+  },
+  "clock_mhz": 100,
+  "external_binary_artifacts": {
+    "build/runtime-image-v2/runtime_soc.bit": {
+      "sha256": "14d5f3e2ce9c20cfc9a584a8d80dedf28f55dc9be2e02faca301bc0e9707b1f1",
+      "bytes": 2083867,
+      "included_in_git": false
+    },
+    "build/runtime-image-v2/runtime_soc.xsa": {
+      "sha256": "4f6c036e60a4093dcd547e3d537d6365b9c46506d7eb000286715445a4544584",
+      "bytes": 554881,
+      "included_in_git": false
+    },
+    "build/runtime-image-v2/vitis_ws/runtime_app/build/runtime_app.elf": {
+      "sha256": "c36c1633abc69b2df0295f21f7eef63272eccda8ea0a201a403583ca811c7b4c",
+      "bytes": 211996,
+      "included_in_git": false
+    }
+  },
+  "files": {
+    "compiled-circuits-xelab.console.log": "aaabf7e71edfa94172969b61f131bcca90e9417070ad57043540a16512c4389e",
+    "compiled-circuits-xsim.console.log": "391cf23b070ceb4648568fb585a0bc0f74c6009b9a0dbdc7d3a3b862db62161a",
+    "compiled-circuits-xvlog.console.log": "cf6fba995ef41cd891889208a4bb755d1ece2576df28dd1a3dab4fb4ebd3f319",
+    "complete-bundle-verification.json": "a021acafbf95e49309d65738a909581dcf9300aab5363cc3d01d5b0be4b22652",
+    "runtime_soc_drc.rpt": "ca243897a43317b92a501b8c08716a96a91532c3376de54a3dbea4a4fde6f596",
+    "runtime_soc_timing_summary.rpt": "1f8fb3fd663b68acc368755170017361ecd81deaf2df5c717e32b7f26411afee",
+    "runtime_soc_utilization.rpt": "91d251bc3d50d1f3ed0955be8b7e3f6664be0089a0b3ed3e33c82881853b0051",
+    "tested-sources/constraints/top_runtime_soc.xdc": "cf7d2ad93315a1f98b019d9f60605207dad1ffc299497fe198fffa16bf088283",
+    "tested-sources/rtl/common/runtime_surface_decoder.sv": "68a1606642eed30cffd60efbcf8f5d6ac73ae7b7d285989102547a99cd84294a",
+    "tested-sources/rtl/common/runtime_surface_ps_bridge.sv": "9a0e9ae4dfe213f1d42fc8404ad41b4fbcaeffed705d129ed8a206599921e961",
+    "tested-sources/rtl/top/top_runtime_soc.sv": "d0fbdbf983972ba621b5ab3c4456e6557dc20d124ae372b51c1f2075135788d2",
+    "tested-sources/scripts/bd/top_runtime_soc.tcl": "3ee71a684d209600ac765a2a56ab0209666d2f233ab4733b4e91a6193cfcb0f9",
+    "tested-sources/scripts/build_runtime.tcl": "0c3d92e1bdebcab30310ffc01a955b11cc585ad407293b0d83aae4dbeda56a4d",
+    "tested-sources/vitis/runtime/src/main.c": "b3fc1e26df1895e280c46f110234193e589773e181e665733a27326f322756c2",
+    "tested-sources/vitis/runtime/src/runtime_platform.h": "734a7a6b692fb6ca619e365844adcc67ef538e73e30a14263e2accc5bfdcbaad",
+    "verification.json": "479c4750bf319e121c9c37a1a64e8a188b3329e97a380bd894e0f6a20c0ef9ff",
+    "vitis-build.log": "6e7646e7d9c11b45f4706b6ecb9e93360206f9657c704c23975a578529b5e0d0"
+  }
+}

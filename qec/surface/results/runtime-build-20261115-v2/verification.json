@@ -1,0 +1,24 @@
+{
+  "source_manifest": "../runtime-image-v2-inputs/sha256.json",
+  "artifact_sha256": {
+    "runtime_soc_timing_summary.rpt": "1f8fb3fd663b68acc368755170017361ecd81deaf2df5c717e32b7f26411afee",
+    "runtime_soc_drc.rpt": "ca243897a43317b92a501b8c08716a96a91532c3376de54a3dbea4a4fde6f596",
+    "runtime_soc_utilization.rpt": "91d251bc3d50d1f3ed0955be8b7e3f6664be0089a0b3ed3e33c82881853b0051",
+    "runtime_soc.bit": "14d5f3e2ce9c20cfc9a584a8d80dedf28f55dc9be2e02faca301bc0e9707b1f1",
+    "runtime_soc.xsa": "4f6c036e60a4093dcd547e3d537d6365b9c46506d7eb000286715445a4544584"
+  },
+  "setup_wns_ns": 0.095,
+  "hold_whs_ns": 0.038,
+  "capacity": [
+    128,
+    512,
+    32
+  ],
+  "clock_mhz": 100,
+  "drc_findings": 0,
+  "longpath_measured_cycles": 287940,
+  "rtl_corpus_log": "../runtime-test-core-2e2702a60f1b/xsim.console.log",
+  "compiler_corpus_log": "../runtime-compiled-circuits-v2/xsim.console.log",
+  "unchanged_vendor_exceptions": true,
+  "board_programmed": false
+}

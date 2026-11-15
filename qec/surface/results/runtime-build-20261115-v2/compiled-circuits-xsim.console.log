@@ -1,0 +1,24 @@
+
+****** xsim v2025.2 (64-bit)
+  **** SW Build 6299465 on Fri Nov 14 12:34:56 MST 2025
+  **** IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+  **** SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+  **** Start of session at: Sun Nov 15 16:04:24 2026
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2025 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source xsim.dir/runtime_sim/xsim_script.tcl
+# xsim {runtime_sim} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+graph=0 detectors=2 edges=2 observables=2 shots=128
+graph=1 detectors=4 edges=6 observables=2 shots=128
+graph=2 detectors=24 edges=78 observables=1 shots=128
+graph=3 detectors=40 edges=142 observables=1 shots=128
+graph=4 detectors=72 edges=278 observables=1 shots=128
+graph=5 detectors=128 edges=128 observables=1 shots=1
+PASS runtime core graphs=6 checked_shots=646 maximum_cycles=287940 config recovery stalls abort reset cycles
+$finish called at time : 8537470 ns : File "/home/toastcheng/dev/zybo-qec-decoder/rtl/tb/tb_runtime_core.sv" Line 242
+exit
+INFO: xsimkernel Simulation Memory Usage: 271436 KB (Peak: 336712 KB), Simulation CPU Usage: 950 ms
+INFO: [Common 17-206] Exiting xsim at Sun Nov 15 16:04:26 2026...
