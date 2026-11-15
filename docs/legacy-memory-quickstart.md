@@ -259,23 +259,10 @@ Python version of its own algorithm.
 
 ## Source walkthroughs
 
-Every maintained source file has a Markdown walkthrough beside it, using the same
-basename: for example, [`qec_decoder.sv`](../rtl/common/qec_decoder.sv) and
-[`qec_decoder.md`](../rtl/common/qec_decoder.md). Each walkthrough explains the
-file's interfaces, control flow, invariants and verification commands.
-
-Start with the [web server](../qec/surface/web.md),
-[surface decoder](../rtl/common/surface_decoder.md),
-[PS/PL mailbox](../rtl/common/surface_ps_bridge.md),
-[ARM firmware](../vitis/surface/src/main.md), or
-[host transport](../qec/surface/host.md). Build entry points are covered in the
-[Makefile guide](../Makefile.md) and [SoC build guide](../scripts/build_soc.md).
-
-Source uses four-space indentation (Make recipes retain required tabs), expanded
-control flow and comments for protocol, state-machine and timing assumptions.
-Keep a source's sibling walkthrough current when changing it. `make test` checks
-that every maintained source has one; archived results and fixture snapshots are
-excluded.
+See the [code walkthrough](code-walkthrough.md#older-paths) for the fixed-image
+entry points and how they differ from the runtime decoder. The [Makefile](../Makefile)
+keeps the surface image as its default; runtime build commands are listed in the
+[main quick start](../README.md).
 
 ## Restricted logical compiler
 

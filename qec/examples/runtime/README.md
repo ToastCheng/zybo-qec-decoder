@@ -9,10 +9,10 @@ qubit counts:
 | [phase_bell.stim](phase_bell.stim) | 2 | 2 | 2 | 2 |
 | [two_repetition_echo.stim](two_repetition_echo.stim) | 6 | 4 | 6 | 2 |
 
-Their source walkthroughs explain the actual experiments:
-[phase-Bell verification](phase_bell.md) and
-[two repetition-readout echoes](two_repetition_echo.md). Neither demonstrates
-arbitrary logical-to-fault-tolerant-QEC synthesis or board acceptance.
+Open either `.stim` file to read its gates, noise and measurement annotations.
+The [code walkthrough](../../../docs/code-walkthrough.md) explains how the host
+compiles and decodes them. Neither example demonstrates arbitrary logical-to-
+fault-tolerant-QEC synthesis or board acceptance.
 
 From repository root, print a JSON-safe compiled bundle:
 
