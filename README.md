@@ -55,11 +55,9 @@ vitis -s vitis/surface/build_app.py > build/surface_firmware_build.log 2>&1
 Vivado builds the PS7/AXI GPIO design and PL decoder. Vitis builds the ARM UART
 transport firmware. Check that both commands succeed and produce:
 
-```text
-build/surface_soc.bit
-build/surface_soc.xsa
-build/vitis_ws/surface_app/build/surface_app.elf
-```
+- `build/surface_soc.bit`
+- `build/surface_soc.xsa`
+- `build/vitis_ws/surface_app/build/surface_app.elf`
 
 Review the build logs and `build/top_surface_soc_timing_summary.rpt` before
 loading the board. Skip steps 1–2 for software-only use.
