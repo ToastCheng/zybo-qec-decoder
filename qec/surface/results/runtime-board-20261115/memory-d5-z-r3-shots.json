@@ -1,0 +1,770 @@
+[
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 134217728,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 7778
+  },
+  {
+    "syndrome": 263168,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2522
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 32,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 5050
+  },
+  {
+    "syndrome": 137438961664,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2573
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 360287970189639680,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3364
+  },
+  {
+    "syndrome": 219550481834311680,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 4339
+  },
+  {
+    "syndrome": 1099654561792,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 8608
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 201327104,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 8041
+  },
+  {
+    "syndrome": 3145744,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 6916
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 72057598332895232,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2984
+  },
+  {
+    "syndrome": 8192,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 5341
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 36028797018963968,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 12613
+  },
+  {
+    "syndrome": 36893488147419103232,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 10912
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 562949986975744,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2841
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 384,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2447
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 549755846656,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2619
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 562949986975744,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2841
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 10,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2329
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 134422528,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 11314
+  },
+  {
+    "syndrome": 2952204131333534908416,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 9388
+  },
+  {
+    "syndrome": 70368744177664,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 11145
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 590439925546781507584,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3385
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 144115196665790464,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3001
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 258254488500189528064,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 13238
+  },
+  {
+    "syndrome": 4,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 4528
+  },
+  {
+    "syndrome": 2199023649792,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2945
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 288230393331580928,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3022
+  },
+  {
+    "syndrome": 16777224,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2371
+  },
+  {
+    "syndrome": 106652678226048,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3924
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 2199023255552,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 8181
+  },
+  {
+    "syndrome": 10376293541461622784,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3408
+  },
+  {
+    "syndrome": 9241667910340968448,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 9704
+  },
+  {
+    "syndrome": 1794402976530432,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 4145
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 2199023255552,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 8181
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 214404767416320,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3999
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 8192,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 5341
+  },
+  {
+    "syndrome": 23058430092136942080,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3681
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 4,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 4528
+  },
+  {
+    "syndrome": 2251799813685248,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 9262
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 73786976294838206464,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 10402
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 524289,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2324
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 2147483680,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2417
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 2314850208468434944,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3329
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 4296048640,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 10813
+  },
+  {
+    "syndrome": 1180591625115457814528,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3150
+  },
+  {
+    "syndrome": 4611686018427387904,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 10188
+  },
+  {
+    "syndrome": 18014398509481984,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 8686
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 104857728,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 2971
+  },
+  {
+    "syndrome": 144115206329466880,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 12824
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 10376293541461622784,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3408
+  },
+  {
+    "syndrome": 824636866560,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 3199
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 4611686018427387904,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 10188
+  },
+  {
+    "syndrome": 18014398509481984,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 8686
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  },
+  {
+    "syndrome": 216172816473522176,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 12933
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 497
+  }
+]

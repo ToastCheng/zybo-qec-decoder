@@ -1,13 +1,13 @@
 # Runtime-configurable QEC decoder implementation contract
 
-Status: implementation in progress; not a claim of board acceptance.
+Status: runtime graph loading and decoding verified on the physical Zybo Z7-10; see [verification](runtime-verification.md) for the exact evidence and scope.
 
 ## Verified integration so far
 
 - Parent baseline after core/compiler/host integration: 242 tests passed, 31 skipped.
 - Real Vivado core, mailbox and counter benches passed; each recompiled in isolated parent-run directories under `build/runtime-test-*`.
 - Additional actual compiler-to-core run: `build/runtime-compiled-circuits/summary.json` and `xsim.log`. Loaded phase-Bell (2 qubits, 2 observables), two repetition echoes (6 qubits, 2 observables), d3 Z/r3, d3 X/r5 and d5 Z/r3 into the same simulator image, with 128 actual Stim shots per circuit. Core predictions/errors matched the Python UF reference; the d3 X/r5 sample had two logical failures against Stim truth, retained rather than hidden. A separately identified synthetic long-path diagnostic exercises the 16-bit cycle carry.
-- The pipelined image in `build/runtime-image-v2/` passed routed timing at unchanged capacity and 100 MHz (WNS +0.095 ns, WHS +0.038 ns). Matching ARM firmware built successfully against that XSA; source and bitstream/ELF pairing is recorded in `complete-bundle-verification.json`. No runtime bitstream has been programmed onto the board.
+- The pipelined image in `build/runtime-image-v2/` passed routed timing at unchanged capacity and 100 MHz (WNS +0.095 ns, WHS +0.038 ns). Matching ARM firmware built successfully against that XSA; source and bitstream/ELF pairing is recorded in `complete-bundle-verification.json`. The matching runtime bitstream and ARM firmware were subsequently loaded and verified across six physical graph uploads without reprogramming between circuits; raw evidence is archived separately under `qec/surface/results/runtime-board-20261115/`.
 
 
 ## Goal

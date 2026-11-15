@@ -1,0 +1,26 @@
+{
+  "scope": "Physical runtime graph reload and FPGA decode acceptance",
+  "files": {
+    "board-program.log": "c3f417f11a1bd657b0a56293f411f0a7d5391b76d4f1e9c81782e7bff7969e40",
+    "board-status.log": "cfa6aee043ded7f06dfcf8cf1fb075f4a6a55fa5182a5cb5e724dbbebc0b05b2",
+    "initial-identity.json": "e281291fbf45706ba7a437497c473743b405e69d15555a7393a1b3d1e62562c4",
+    "jtag-discovery.log": "9b28decc023e5001684995b45c04cbe6a34b5bf72d8c5e64974e07190d9867f1",
+    "loaded-bundle.json": "a021acafbf95e49309d65738a909581dcf9300aab5363cc3d01d5b0be4b22652",
+    "memory-d3-x-r5-shots.json": "ca7a60287b18c5c948347115cbeab837a210c6eeb7b085c00d287c7fa2d51e14",
+    "memory-d3-x-r5.json": "850175fc6cc880579b6549c7a3d06a489621dc3eeb2e7136ea7ce9aa746ef27e",
+    "memory-d3-z-r3-shots.json": "2d9b75c322b92d06081db224baece58cee7a58d775821778465a4d2ebf9d56e3",
+    "memory-d3-z-r3.json": "3c8b4fd38b8aeb116cb070b1dff68c9d2812cd204b0a8b5701b5aeaea9649d62",
+    "memory-d5-z-r3-shots.json": "e84bb7770b68f30a8a5420db23a7f2e0e1b96e1796e6a70ff8e68f86eae4ac4e",
+    "memory-d5-z-r3.json": "22247e7d0772585e0c3c3964ed0229d84ec73567ace028e5de2a5e45077ba8fa",
+    "phase_bell-shots.json": "409f4b9b261b175105ef738a1f88149adfcb8135b12e41d24f23c62afa376337",
+    "phase_bell.json": "0cfa16da9485f1b8838263f3823e4c4b383d59252cb96be58e3469be599b288d",
+    "physical-verification.json": "8a999525fbdf2c12dde519c722cbed047a24508a451d30f5ffb5a6fa7b101786",
+    "summary.json": "87415551732a9513ae538cb7ef96980a74cc07da19faebdfe32019f26f4c21aa",
+    "tested-acceptance.py": "134c4e4204a964641cfb82345f93194b9621566fc761b74d25bca32e1c7ce84c",
+    "two_repetition_echo-shots.json": "7aa59b69603411b40b602d1226659d9b766e84c9f8a4886060fedbf35a6baf89",
+    "two_repetition_echo.json": "11af5470110b4ae6d6358cae90d63230c00d6edfaaa754cea5b28fb2dbd740c5",
+    "unlisted-bit31-shots.json": "bdee1397ff2828ce901005d3250ea796bae969e0c49812ccc13eacc4c2ba0e3d",
+    "unlisted-bit31.json": "ce75816777002d8934095db340d500f5d5d3242f17ff2d414f257b7324e94147",
+    "wire.json": "26cf011bc8dcbe0e3357dbc69d5fd070ffd4e2348c01d111cdfc4c1ef2801139"
+  }
+}

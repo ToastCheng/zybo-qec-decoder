@@ -49,9 +49,10 @@ count; the host parser separately bounds it for resource safety. The decoder is
 unweighted union-find/peeling. Non-graphlike fault components, ambiguous observable
 labels and detectorless logical faults are rejected rather than silently dropped.
 
-The runtime image has passed RTL regressions, routed timing and an ARM firmware
-build. Physical-board acceptance is pending; the screenshot below is explicitly
-Software mode. See [verification evidence](docs/runtime-verification.md).
+The runtime image has passed RTL regressions, routed timing, an ARM firmware
+build and physical FPGA checks across six different circuit graphs without
+reprogramming between graphs. See [verification evidence](docs/runtime-verification.md).
+The screenshot below is explicitly Software mode.
 
 ### 1. Build the runtime bitstream and firmware
 
@@ -71,7 +72,7 @@ The default output directory is `build/runtime-image` and must be fresh:
 Review `runtime_soc_timing_summary.rpt`, `runtime_soc_utilization.rpt` and
 `runtime_soc_drc.rpt` in the image directory. The build refuses public image export
 if routed setup or hold timing fails. To rebuild, select a new output directory
-with the [runtime build options](scripts/build_runtime.md); do not overwrite an
+with the [runtime build options](docs/code-walkthrough.md#scripts-build-simulate-and-load); do not overwrite an
 earlier result. Skip steps 1–2 for software-only use.
 
 ### 2. Load the board
@@ -211,7 +212,7 @@ python -m qec.surface.runtime_run qec/examples/runtime/two_repetition_echo.stim 
 The CLI uploads the graph once, decodes the sampled batch and archives actual
 predictions, truth, core cycles and serial evidence. `--out` must be new.
 `--reference FILE` supplies an explicit compatible noisy reference. See the
-[runner walkthrough](qec/surface/runtime_run.md) for archive fields and failure
+[CLI walkthrough](docs/code-walkthrough.md#follow-one-cli-run) for archive fields and failure
 behavior. Equal seeds do not imply equal shots across the CLI batch sampler and
 the web's single-shot FlipSimulator call sequence.
 
@@ -240,19 +241,12 @@ truth are measured separately.
 
 ## Source walkthroughs
 
-Every maintained source has a Markdown walkthrough beside it. Start with the
-[physical-circuit compiler](qec/surface/runtime_circuit.md),
-[web server](qec/surface/runtime_web.md),
-[runtime core](rtl/common/runtime_surface_decoder.md),
-[PS/PL mailbox](rtl/common/runtime_surface_ps_bridge.md),
-[ARM firmware](vitis/runtime/src/main.md),
-[serial host](qec/surface/runtime_host.md), or
-[runtime build](scripts/build_runtime.md).
+Start with the [code walkthrough](docs/code-walkthrough.md). It explains the
+entry points in `qec/`, `rtl/`, `scripts/` and `vitis/`, follows one decode from
+Python to the FPGA, and separates the runtime path from the older fixed images.
 
-Run `make test` with the Python environment active. It includes adjacent-document
-coverage; real RTL, browser and routed timing verification commands are described
-in their corresponding walkthroughs. Source uses four-space indentation and
-comments for protocol, state-machine and timing assumptions.
+Run `make test` with the Python environment active. It checks the software and
+documentation links; the walkthrough also lists RTL and browser checks.
 
 ## Other paths
 

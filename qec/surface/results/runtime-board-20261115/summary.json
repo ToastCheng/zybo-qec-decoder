@@ -1,0 +1,116 @@
+{
+  "source": "FPGA",
+  "reprogrammed_between_graphs": false,
+  "initial_generation": 1,
+  "final_generation": 7,
+  "circuits": [
+    {
+      "name": "phase_bell",
+      "counts": {
+        "qubits": 2,
+        "detectors": 2,
+        "observables": 2,
+        "edges": 2,
+        "measurements": 2,
+        "ticks": 1
+      },
+      "generation": 2,
+      "shots": 128,
+      "diagnostic_windows": 20,
+      "reference_mismatches": 0,
+      "logical_failures": 0,
+      "min_cycles": 12,
+      "max_cycles": 63
+    },
+    {
+      "name": "two_repetition_echo",
+      "counts": {
+        "qubits": 6,
+        "detectors": 4,
+        "observables": 2,
+        "edges": 6,
+        "measurements": 6,
+        "ticks": 2
+      },
+      "generation": 3,
+      "shots": 128,
+      "diagnostic_windows": 22,
+      "reference_mismatches": 0,
+      "logical_failures": 0,
+      "min_cycles": 21,
+      "max_cycles": 160
+    },
+    {
+      "name": "unlisted-bit31",
+      "counts": {
+        "qubits": 3,
+        "detectors": 1,
+        "observables": 32,
+        "edges": 1,
+        "measurements": 1,
+        "ticks": 1
+      },
+      "generation": 4,
+      "shots": 128,
+      "diagnostic_windows": 19,
+      "reference_mismatches": 0,
+      "logical_failures": 0,
+      "min_cycles": 31,
+      "max_cycles": 31
+    },
+    {
+      "name": "memory-d3-z-r3",
+      "counts": {
+        "qubits": 26,
+        "detectors": 24,
+        "observables": 1,
+        "edges": 78,
+        "measurements": 33,
+        "ticks": 21
+      },
+      "generation": 5,
+      "shots": 128,
+      "diagnostic_windows": 42,
+      "reference_mismatches": 0,
+      "logical_failures": 0,
+      "min_cycles": 153,
+      "max_cycles": 3649
+    },
+    {
+      "name": "memory-d3-x-r5",
+      "counts": {
+        "qubits": 26,
+        "detectors": 40,
+        "observables": 1,
+        "edges": 142,
+        "measurements": 49,
+        "ticks": 35
+      },
+      "generation": 6,
+      "shots": 128,
+      "diagnostic_windows": 58,
+      "reference_mismatches": 0,
+      "logical_failures": 0,
+      "min_cycles": 265,
+      "max_cycles": 6214
+    },
+    {
+      "name": "memory-d5-z-r3",
+      "counts": {
+        "qubits": 64,
+        "detectors": 72,
+        "observables": 1,
+        "edges": 278,
+        "measurements": 97,
+        "ticks": 21
+      },
+      "generation": 7,
+      "shots": 128,
+      "diagnostic_windows": 90,
+      "reference_mismatches": 0,
+      "logical_failures": 0,
+      "min_cycles": 497,
+      "max_cycles": 13238
+    }
+  ]
+}

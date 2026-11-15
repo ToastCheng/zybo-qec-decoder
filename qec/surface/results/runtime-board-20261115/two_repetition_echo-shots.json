@@ -1,0 +1,770 @@
+[
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 12,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 86
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 1,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 128
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 12,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 86
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 8,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 160
+  },
+  {
+    "syndrome": 12,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 86
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 4,
+    "truth": 2,
+    "prediction": 2,
+    "cycles": 156
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 1,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 128
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 4,
+    "truth": 2,
+    "prediction": 2,
+    "cycles": 156
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 2,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 132
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 4,
+    "truth": 2,
+    "prediction": 2,
+    "cycles": 156
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 12,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 86
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 4,
+    "truth": 2,
+    "prediction": 2,
+    "cycles": 156
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 3,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 72
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 8,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 160
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  },
+  {
+    "syndrome": 1,
+    "truth": 1,
+    "prediction": 1,
+    "cycles": 128
+  },
+  {
+    "syndrome": 0,
+    "truth": 0,
+    "prediction": 0,
+    "cycles": 21
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "source": "Physical FPGA",
+  "port": "/dev/ttyUSB1",
+  "flash_written": false,
+  "reprogrammed_between_graphs": false,
+  "transactions": 3096,
+  "decodes": 1019,
+  "graphs": 6,
+  "shots": 768,
+  "diagnostic_windows": 251,
+  "reference_mismatches": 0,
+  "logical_failures": 0,
+  "independent_seeded_truth_replay": true,
+  "all_frame_crc_sequence_prediction_checks": true
+}

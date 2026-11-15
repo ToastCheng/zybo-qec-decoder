@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "circuit": "R 0 1 2\nH 2\nTICK\nH 2\nX_ERROR(1) 2\nM 2\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(31) rec[-1]",
+  "ideal": "R 0 1 2\nH 2\nTICK\nH 2\nM 2\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(31) rec[-1]",
+  "dem": "error(1) D0 L31",
+  "reference_dem": "error(1) D0 L31",
+  "reference_circuit": "R 0 1 2\nH 2\nTICK\nH 2\nX_ERROR(1) 2\nM 2\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(31) rec[-1]",
+  "capacities": {
+    "max_detectors": 128,
+    "max_edges": 512,
+    "max_observables": 32,
+    "max_qubits": 1024,
+    "max_bytes": 262144,
+    "max_expanded_bytes": 2097152,
+    "max_instructions": 20000,
+    "max_targets": 100000,
+    "max_repeat": 1024,
+    "max_depth": 16,
+    "max_work": 20000000
+  },
+  "edges": [
+    [
+      0,
+      1,
+      2147483648
+    ]
+  ],
+  "boundary_vertex": 1,
+  "counts": {
+    "qubits": 3,
+    "detectors": 1,
+    "observables": 32,
+    "edges": 1,
+    "measurements": 1,
+    "ticks": 1
+  },
+  "layout": {
+    "qubits": {}
+  },
+  "operations": [
+    {
+      "name": "R",
+      "tick": 0,
+      "stim": "R 0 1 2",
+      "measurement_start": 0,
+      "measurement_count": 0,
+      "targets": [
+        "stim.GateTarget(0)",
+        "stim.GateTarget(1)",
+        "stim.GateTarget(2)"
+      ],
+      "args": []
+    },
+    {
+      "name": "H",
+      "tick": 0,
+      "stim": "H 2",
+      "measurement_start": 0,
+      "measurement_count": 0,
+      "targets": [
+        "stim.GateTarget(2)"
+      ],
+      "args": []
+    },
+    {
+      "name": "TICK",
+      "tick": 0,
+      "stim": "TICK",
+      "measurement_start": 0,
+      "measurement_count": 0,
+      "targets": [],
+      "args": []
+    },
+    {
+      "name": "H",
+      "tick": 1,
+      "stim": "H 2",
+      "measurement_start": 0,
+      "measurement_count": 0,
+      "targets": [
+        "stim.GateTarget(2)"
+      ],
+      "args": []
+    },
+    {
+      "name": "X_ERROR",
+      "tick": 1,
+      "stim": "X_ERROR(1) 2",
+      "measurement_start": 0,
+      "measurement_count": 0,
+      "targets": [
+        "stim.GateTarget(2)"
+      ],
+      "args": [
+        1.0
+      ]
+    },
+    {
+      "name": "M",
+      "tick": 1,
+      "stim": "M 2",
+      "measurement_start": 0,
+      "measurement_count": 1,
+      "targets": [
+        "stim.GateTarget(2)"
+      ],
+      "args": []
+    },
+    {
+      "name": "DETECTOR",
+      "tick": 1,
+      "stim": "DETECTOR rec[-1]",
+      "measurement_start": 1,
+      "measurement_count": 0,
+      "targets": [
+        "stim.target_rec(-1)"
+      ],
+      "args": []
+    },
+    {
+      "name": "OBSERVABLE_INCLUDE",
+      "tick": 1,
+      "stim": "OBSERVABLE_INCLUDE(31) rec[-1]",
+      "measurement_start": 1,
+      "measurement_count": 0,
+      "targets": [
+        "stim.target_rec(-1)"
+      ],
+      "args": [
+        31.0
+      ]
+    }
+  ],
+  "detectors": [
+    {
+      "index": 0,
+      "tick": 1,
+      "available_after_operation": 6,
+      "measurements": [
+        0
+      ],
+      "coordinates": []
+    }
+  ],
+  "stim_version": "1.16.0",
+  "sha256": {
+    "circuit": "93ffd0364454ec8d9986a3ec861b7556b3ab46c7a29862e54bb1f754ac0fce18",
+    "ideal": "cc527ce1eb720b6d1a0de687608d6cdd644a1882c823663e283efc2a344bc42e",
+    "dem": "9c03be7ad5a569fc665cdeafff9c48c9e6b176f26e865648d558edf15c2e53f7",
+    "reference_dem": "9c03be7ad5a569fc665cdeafff9c48c9e6b176f26e865648d558edf15c2e53f7",
+    "reference_circuit": "93ffd0364454ec8d9986a3ec861b7556b3ab46c7a29862e54bb1f754ac0fce18",
+    "graph": "7cd9cad61ce0f523943e3ad8445416e99fc6f88e7e18eb87bb78b538883ec912"
+  },
+  "detector_order": "Stim detector index, little-endian",
+  "observable_order": "bit i = Stim observable L_i",
+  "limitations": [
+    "Physical detector-annotated circuit acceptance, not logical-to-fault-tolerant QEC synthesis",
+    "Unweighted runtime graph; not weighted MWPM equivalence",
+    "Separator correlations remain in DEM; independent-edge approximation in graph",
+    "Software compilation only; no hardware acceptance or adaptive feedback"
+  ]
+}

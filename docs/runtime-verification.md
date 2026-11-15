@@ -55,6 +55,12 @@ python -m qec.surface.runtime_web --port 18767
 RUNTIME_WEB_URL=http://127.0.0.1:18767 make test
 ```
 
-## Remaining acceptance
+## Physical-board execution
 
-The runtime image has **not been programmed or tested on the physical board**. Acceptance still requires authorized volatile PL/ARM loading, readback/configuration checks, runtime uploads of several different circuit graphs, actual multibit predictions, malformed-traffic recovery and same-shot comparison with Stim truth and the Python reference. It also requires a fresh physical acceptance archive. No flash writes are needed.
+The matching runtime bitstream and ARM firmware were loaded over JTAG onto the Zybo Z7-10. Configuration readback showed DONE and INIT_B asserted and CRC error clear. No flash was written.
+
+Six circuit graphs were uploaded and decoded without reprogramming between them: phase-Bell, two repetition echoes, an unlisted three-qubit Clifford circuit using observable bit 31, d3 Z/r3, d3 X/r5 and d5 Z/r3. Across 768 actual Stim shots and 251 diagnostic windows, all 1,019 FPGA predictions matched the Python UF reference; the sampled shots had zero logical failures in this finite corpus. This is not a zero-error-rate or threshold claim.
+
+All 3,096 archived request/reply transactions were independently checked for framing, CRC and sequence. Seeded detector and observable truth was independently regenerated. Raw circuits, shots, wire frames, JTAG/program/configuration logs and the loaded artifact hashes are in the [physical archive](../qec/surface/results/runtime-board-20261115/manifest.json). Its `physical-verification.json` records the later board result; `loaded-bundle.json` preserves the earlier build-only provenance unchanged.
+
+The runtime web interface was also exercised against the physical FPGA: explicit Run completed, the page reported FPGA cycles, and Replay made no additional API requests. Physical malformed-traffic/reset injection is not claimed by this capture; those cases have native/PTY/RTL regression evidence described above. The system still decodes completed simulated windows, not live adaptive quantum feedback.
