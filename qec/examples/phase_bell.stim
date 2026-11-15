@@ -1,0 +1,15 @@
+# Prepare two qubits, then measure their YX and ZZ checks.
+QUBIT_COORDS(0, 0) 0
+QUBIT_COORDS(1, 0) 1
+R 0 1
+H 0
+S 0
+CX 0 1
+TICK
+X_ERROR(0.02) 0
+Z_ERROR(0.03) 0
+MPP Y0*X1 Z0*Z1
+DETECTOR(0, 1) rec[-2]
+DETECTOR(1, 1) rec[-1]
+OBSERVABLE_INCLUDE(0) rec[-2]
+OBSERVABLE_INCLUDE(1) rec[-1]

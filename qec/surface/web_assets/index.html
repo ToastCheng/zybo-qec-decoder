@@ -13,42 +13,98 @@
       <span id="source">Connecting…</span>
     </header>
     <main>
-      <!-- IDs/data-pauli are app.js bindings. Transport remains disabled until
-           a compatible layout and replay arrive. -->
-      <section id="configure" class="workflow-step" aria-labelledby="configure-title">
-      <h2 id="configure-title">1 Configure</h2>
-      <div class="settings">
-        <label class="template">Supported circuit
-          <select id="circuit-template"><option value="surface_code:rotated_memory_z">d3 Z memory · 3 rounds</option></select>
-        </label>
-        <label>Seed <input id="seed" type="number" min="0" step="1" value="20261107" required /></label>
-        <label>After Clifford depolarization <input id="after_clifford_depolarization" type="number" min="0" max="0.75" step="0.001" value="0.001" required /></label>
-        <label>Before round data depolarization <input id="before_round_data_depolarization" type="number" min="0" max="0.75" step="0.001" value="0.001" required /></label>
-        <label>Before measure flip <input id="before_measure_flip_probability" type="number" min="0" max="0.75" step="0.001" value="0.001" required /></label>
-        <label>After reset flip <input id="after_reset_flip_probability" type="number" min="0" max="0.75" step="0.001" value="0.001" required /></label>
-      </div>
-      <div class="toolbar">
-        <fieldset>
-          <legend>Inject</legend>
-          <button data-pauli="X" aria-pressed="true">X</button
-          ><button data-pauli="Y" aria-pressed="false">Y</button
-          ><button data-pauli="Z" aria-pressed="false">Z</button>
-        </fieldset>
-        <label
-          >Fault tick
-          <input id="fault-tick" type="number" min="0" max="21" value="0"
-        /></label>
-        <button id="example" disabled>Example fault</button>
-        <button id="reset" disabled>Clear faults</button>
-        <span id="scenario">Example · X on q10 at tick 8</span>
-      </div>
+      <section
+        id="configure"
+        class="workflow-step"
+        aria-labelledby="configure-title"
+      >
+        <h2 id="configure-title">1 Configure</h2>
+        <div class="settings">
+          <label class="template"
+            >Circuit
+            <select id="circuit-template">
+              <option value="surface_code:rotated_memory_z">
+                Surface memory · d3 Z · 3 rounds
+              </option>
+              <option value="custom">Custom Clifford circuit</option>
+            </select>
+          </label>
+          <label
+            >Seed
+            <input
+              id="seed"
+              type="number"
+              min="0"
+              step="1"
+              value="20261107"
+              required
+          /></label>
+          <label
+            >After Clifford depolarization
+            <input
+              id="after_clifford_depolarization"
+              type="number"
+              min="0"
+              max="0.75"
+              step="0.001"
+              value="0.001"
+              required
+          /></label>
+          <label
+            >Before round data depolarization
+            <input
+              id="before_round_data_depolarization"
+              type="number"
+              min="0"
+              max="0.75"
+              step="0.001"
+              value="0.001"
+              required
+          /></label>
+          <label
+            >Before measure flip
+            <input
+              id="before_measure_flip_probability"
+              type="number"
+              min="0"
+              max="0.75"
+              step="0.001"
+              value="0.001"
+              required
+          /></label>
+          <label
+            >After reset flip
+            <input
+              id="after_reset_flip_probability"
+              type="number"
+              min="0"
+              max="0.75"
+              step="0.001"
+              value="0.001"
+              required
+          /></label>
+        </div>
+        <div class="toolbar">
+          <fieldset>
+            <legend>Inject</legend>
+            <button data-pauli="X" aria-pressed="true">X</button
+            ><button data-pauli="Y" aria-pressed="false">Y</button
+            ><button data-pauli="Z" aria-pressed="false">Z</button>
+          </fieldset>
+          <label
+            >Fault tick
+            <input id="fault-tick" type="number" min="0" max="21" value="0"
+          /></label>
+          <button id="example" disabled>Example fault</button>
+          <button id="reset" disabled>Clear faults</button>
+          <span id="scenario">Example · X on q10 at tick 8</span>
+        </div>
       </section>
       <section class="workflow-step run-step" aria-labelledby="run-title">
         <h2 id="run-title">2 Simulate + decode</h2>
         <button id="run" disabled>Run</button>
         <output id="run-summary" aria-live="polite"></output>
       </section>
-      <!-- Keep transport/status before the workspace, outside collapsed evidence. -->
       <div class="replay">
         <h2>3 Replay</h2>
         <div class="transport">
@@ -78,15 +134,16 @@
         />
       </div>
       <div id="status" role="status" aria-live="polite">Loading…</div>
-      <!-- app.js rebuilds qubits and detector cells at the selected replay tick,
-           including when scrubbing backward across measurement boundaries. -->
       <div class="workspace">
         <section class="physical" aria-label="Circuit replay">
           <div class="section-head">
             <h2 id="tick-label">Tick 0</h2>
             <span id="operations">R</span>
           </div>
-          <div id="lattice" aria-label="Surface code qubits"></div>
+          <p id="grid-note">Surface-memory physical qubits</p>
+          <div id="physical-scroll">
+            <div id="lattice" aria-label="All physical qubits"></div>
+          </div>
           <div class="legend">
             <span class="gate-key">Active gate</span
             ><span class="error-key">Error</span
@@ -94,7 +151,17 @@
             ><span class="fix-key">Host correction</span>
           </div>
         </section>
-        <section aria-label="Detector timeline">
+        <section aria-label="Circuit and detector timeline">
+          <section id="circuit-view" aria-label="Logical or input circuit">
+            <div class="section-head">
+              <h2 id="diagram-title">Logical memory</h2>
+            </div>
+            <p id="diagram-note">
+              Known surface-memory experiment · one encoded Z-memory wire.
+            </p>
+            <div id="diagram-scroll"><div id="circuit-diagram"></div></div>
+          </section>
+
           <div class="section-head">
             <h2>Detectors</h2>
             <span id="event-count">0</span>
@@ -107,15 +174,65 @@
         </section>
       </div>
 
-      <!-- Server evidence and host counterfactuals, not live gate telemetry. -->
+      <details id="circuit-editor">
+        <summary>Circuit</summary>
+        <p>
+          Edit annotated Stim, then select Custom Clifford circuit above and
+          press Run. Seed is shared with the configuration above. The four
+          surface-memory noise rates and lattice fault controls apply only to
+          Surface memory.
+        </p>
+        <label
+          >Annotated Stim circuit<textarea
+            id="circuit-text"
+            rows="9"
+            spellcheck="false"
+          >
+R 0
+X_ERROR(0.01) 0
+TICK
+M 0
+DETECTOR rec[-1]
+OBSERVABLE_INCLUDE(0) rec[-1]</textarea>
+        </label>
+        <label
+          >Reference Stim (optional)<textarea
+            id="reference-text"
+            rows="4"
+            spellcheck="false"
+            placeholder="Leave blank for the circuit's noiseless reference"
+          ></textarea>
+        </label>
+        <label
+          >Logical circuit (optional, as supplied)<textarea
+            id="logical-text"
+            rows="3"
+            spellcheck="false"
+            placeholder="Optional Clifford gates, for example H 0. Mapping is not verified."
+          ></textarea>
+        </label>
+        <label
+          >Added gate depolarization
+          <input
+            id="added-noise"
+            type="number"
+            min="0"
+            max="0.75"
+            step="0.001"
+            value="0"
+            required
+        /></label>
+      </details>
       <details id="evidence">
         <summary>Details</summary>
         <p>
-          Faults enter before the selected tick's operations. Tick 22 is a host
-          correction overlay, not a physical gate. FPGA decodes complete
-          windows; it returns prediction and measured cycles only. Graph edges
-          and representative Pauli replay are host-derived. Replay is
-          counterfactual, not live feedback.
+          Surface-memory faults enter before the selected tick's operations.
+          Tick 22 is a host correction overlay, not a physical gate. FPGA
+          decodes complete windows; it returns prediction and measured cycles
+          only. Graph edges and representative Pauli replay are host-derived.
+          Replay is counterfactual, not live feedback. Custom circuits replay
+          their own wires, gates and detector availability; no representative
+          host correction is invented.
         </p>
         <pre id="technical"></pre>
         <details>

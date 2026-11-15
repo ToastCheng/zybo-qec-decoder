@@ -1,4 +1,3 @@
-/* Shared palette/type; state colors are checked by the browser regression. */
 :root {
   --paper: #f2f2ed;
   --ink: #202b2a;
@@ -124,7 +123,6 @@ label {
 }
 .workspace {
   display: grid;
-  /* Zero-minimum tracks prevent long content from forcing page overflow. */
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   border: 1px solid var(--line);
   background: var(--panel);
@@ -152,7 +150,6 @@ h2 {
 }
 #lattice {
   position: relative;
-  /* Percentage-positioned buttons and the 720-unit CX SVG scale together. */
   aspect-ratio: 1;
   max-width: 470px;
   margin: auto;
@@ -203,8 +200,6 @@ h2 {
   border-radius: 4px;
   cursor: default;
 }
-/* State precedence is intentional: error overrides active, correction overrides
-   error, then nonidentity residual restores amber. Do not reorder casually. */
 .qubit.active {
   background: #adddf6;
   color: #153c55;
@@ -281,7 +276,6 @@ h2 {
 }
 #timeline {
   display: grid;
-  /* One check-label column plus four measurement-boundary columns, not ticks. */
   grid-template-columns: 44px repeat(4, minmax(0, 1fr));
   gap: 5px;
   margin: 0 18px 16px;
@@ -316,8 +310,6 @@ h2 {
 .detector b {
   font: 12px var(--mono);
 }
-/* Unavailable differs from measured zero. Cleared denotes host replay, not an
-   actual detector measurement being erased on the device. */
 .detector[data-available="false"] {
   opacity: 0.5;
 }
@@ -389,7 +381,6 @@ details p {
   color: var(--muted);
   font-size: 12px;
 }
-/* Raw JSON/circuits scroll inside evidence rather than widening the page. */
 pre {
   overflow: auto;
   max-height: 350px;
@@ -399,12 +390,12 @@ pre {
   padding: 16px;
   max-width: 100%;
 }
-/* Configure/run/replay remain distinct without competing with the lattice. */
 .workflow-step {
   border-bottom: 1px solid var(--line);
   padding: 12px 0;
 }
-.workflow-step h2, .replay > h2 {
+.workflow-step h2,
+.replay > h2 {
   margin-bottom: 12px;
 }
 .settings {
@@ -420,11 +411,13 @@ pre {
   gap: 4px;
   min-width: 0;
 }
-.settings input, .settings select {
+.settings input,
+.settings select {
   width: 100%;
   min-width: 0;
 }
-.template, .settings label:nth-child(2) {
+.template,
+.settings label:nth-child(2) {
   grid-column: span 2;
 }
 .toolbar {
@@ -438,7 +431,8 @@ pre {
 .replay {
   padding: 12px 0;
 }
-#scenario, #run-summary {
+#scenario,
+#run-summary {
   overflow-wrap: anywhere;
 }
 .run-step {
@@ -474,7 +468,6 @@ pre {
     flex-basis: 100%;
   }
 }
-/* Stack panels on narrow screens; transport stays above the workspace. */
 @media (max-width: 760px) {
   main {
     padding: 16px;
@@ -522,8 +515,118 @@ pre {
     font-size: 10px;
   }
 }
-/* Cosmetic interpolation only; JS controls replay ticks and detector gating.
-   Reduced motion removes transitions, not replay progression. */
+[hidden] {
+  display: none !important;
+}
+#physical-scroll {
+  max-height: 470px;
+  overflow: auto;
+}
+#lattice.index-lattice {
+  max-width: none;
+  aspect-ratio: auto;
+  margin: 0;
+}
+#grid-note,
+#diagram-note {
+  padding: 0 18px;
+  color: var(--muted);
+  font: 11px/1.6 var(--mono);
+  overflow-wrap: anywhere;
+}
+#circuit-view {
+  min-width: 0;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+#diagram-scroll {
+  max-height: 430px;
+  overflow: auto;
+}
+#circuit-diagram {
+  width: max-content;
+  min-width: 100%;
+}
+#circuit-diagram svg {
+  display: block;
+  font: 10px var(--mono);
+}
+.circuit-wire line {
+  stroke: #9aafa3;
+  stroke-width: 1;
+}
+.circuit-wire text {
+  fill: var(--ink);
+}
+.gate line,
+.gate path {
+  stroke: #35799e;
+  stroke-width: 2;
+}
+.gate rect,
+.gate .target circle {
+  fill: var(--panel);
+  stroke: #566662;
+}
+.gate .control {
+  fill: #35799e;
+}
+.gate text {
+  fill: var(--ink);
+}
+.gate.active rect,
+.gate.active .target circle {
+  fill: #adddf6;
+}
+#timeline.generic-detectors {
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  max-height: 430px;
+  overflow: auto;
+}
+#circuit-editor label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin: 10px 0;
+}
+textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 10px;
+  font: 11px/1.6 var(--mono);
+}
+#added-noise {
+  max-width: 180px;
+}
+.section-head > span {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+#grid-note {
+  margin: 0;
+  padding-bottom: 8px;
+}
+main {
+  padding-top: 12px;
+}
+.workflow-step {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.settings {
+  gap: 6px 18px;
+  margin-bottom: 10px;
+}
+.replay {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
 @media (prefers-reduced-motion: no-preference) {
   .qubit,
   .detector {

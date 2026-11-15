@@ -1,5 +1,3 @@
-// Opt-in real-browser regression: QEC_WEB_URL=http://127.0.0.1:8766 node --test qec/tests/test_web_browser.cjs
-// Uses Chrome + Node's native CDP WebSocket; no npm dependencies or synthetic results.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
@@ -15,7 +13,6 @@ test(
     timeout: 30000,
   },
   async (t) => {
-    // Isolate cache/state; cleanup owns only this child and its temporary profile.
     const profile = fs.mkdtempSync(
       path.join(process.env.TMPDIR || os.tmpdir(), "qec-ui-chrome-"),
     );
@@ -56,12 +53,12 @@ test(
       ws.onerror = reject;
     });
     t.after(() => ws.close());
-    // Correlate CDP responses by ID; unsolicited runtime failures stay separate.
     let id = 0;
     const requests = new Map();
     const errors = [];
     const posts = [];
-    let holdRun = false, heldRequest;
+    let holdRun = false,
+      heldRequest;
     ws.onmessage = ({ data }) => {
       const message = JSON.parse(data);
       if (message.id) {
@@ -70,7 +67,10 @@ test(
         message.error
           ? entry.reject(Error(JSON.stringify(message.error)))
           : entry.resolve(message.result);
-      } else if (message.method === "Network.requestWillBeSent" && message.params.request.method === "POST")
+      } else if (
+        message.method === "Network.requestWillBeSent" &&
+        message.params.request.method === "POST"
+      )
         posts.push(message.params.request);
       else if (message.method === "Runtime.exceptionThrown")
         errors.push(message.params.exceptionDetails.text);
@@ -79,7 +79,6 @@ test(
           heldRequest = message.params.requestId;
           return;
         }
-        // Explicit failure fixture only, never fabricated successful evidence.
         cdp("Fetch.fulfillRequest", {
           requestId: message.params.requestId,
           responseCode: 503,
@@ -109,7 +108,6 @@ test(
       );
       return result.result.value;
     };
-    // Poll semantic readiness; short delays below let CSS colors settle as well.
     const until = async (expression, description) => {
       for (let i = 0; i < 150; i++) {
         if (await js(expression)) return;
@@ -126,18 +124,32 @@ test(
       mobile: false,
     });
     await cdp("Page.navigate", { url: process.env.QEC_WEB_URL });
-    await until('document.getElementById("run") && !document.getElementById("run").disabled', "configuration ready");
+    await until(
+      'document.getElementById("run") && !document.getElementById("run").disabled',
+      "configuration ready",
+    );
     assert.equal(await js('document.getElementById("play").disabled'), true);
     await delay(200);
-    assert.equal(await js('document.getElementById("lattice").getBoundingClientRect().top < 650'), true, "configuration keeps the lattice prominent on desktop");
+    assert.equal(
+      await js(
+        'document.getElementById("lattice").getBoundingClientRect().top < 650',
+      ),
+      true,
+      "configuration keeps the lattice prominent on desktop",
+    );
     assert.equal(posts.length, 0, "page load must never run");
     assert.equal(await js('document.getElementById("seed").value'), "20261107");
-    assert.deepEqual(await js('[...document.querySelectorAll(".settings input:not(#seed)")].map(e => e.value)'), ["0.001", "0.001", "0.001", "0.001"]);
-    // Zero the stochastic rates for deterministic visual/correction assertions.
-    await js('[...document.querySelectorAll(".settings input:not(#seed)")].forEach(e => {e.value="0";e.dispatchEvent(new Event("input"));})');
+    assert.deepEqual(
+      await js(
+        '[...document.querySelectorAll(".settings input:not(#seed)")].map(e => e.value)',
+      ),
+      ["0.001", "0.001", "0.001", "0.001"],
+    );
+    await js(
+      '[...document.querySelectorAll(".settings input:not(#seed)")].forEach(e => {e.value="0";e.dispatchEvent(new Event("input"));})',
+    );
     assert.equal(posts.length, 0, "settings edits must never run");
     await js('document.getElementById("run").click()');
-    // Exercise Replay itself after the explicit run, not an injected render state.
     await until(
       'document.getElementById("play") && !document.getElementById("play").disabled && document.querySelectorAll(".qubit").length === 17',
       "ready",
@@ -197,8 +209,12 @@ test(
       ),
       "rgb(191, 230, 205)",
     );
-    // A valid representative may leave a stabilizer frame, not sitewise I.
-    assert.equal(await js('JSON.parse(document.getElementById("technical").textContent).residual_observable'), 0);
+    assert.equal(
+      await js(
+        'JSON.parse(document.getElementById("technical").textContent).residual_observable',
+      ),
+      0,
+    );
     assert.equal(
       await js('document.querySelectorAll(".detector.cleared").length'),
       2,
@@ -224,32 +240,57 @@ test(
       "1 / 22",
       "Play replays from completed state",
     );
-    await js('document.getElementById("play").click(); document.getElementById("back").click(); document.getElementById("step").click()');
-    assert.equal(await js('document.getElementById("play").textContent'), "Replay");
+    await js(
+      'document.getElementById("play").click(); document.getElementById("back").click(); document.getElementById("step").click()',
+    );
+    assert.equal(
+      await js('document.getElementById("play").textContent'),
+      "Replay",
+    );
     await delay(100);
-    assert.equal(posts.length, 1, "Replay, Pause, back/step, backward scrub and restart must never request decoding");
+    assert.equal(
+      posts.length,
+      1,
+      "Replay, Pause, back/step, backward scrub and restart must never request decoding",
+    );
     assert.match(posts[0].url, /\/api\/run$/);
     assert.equal(JSON.parse(posts[0].postData).seed, 20261107);
     await js('document.getElementById("reset").click()');
     assert.equal(await js('document.getElementById("play").disabled'), true);
-    assert.match(await js('document.getElementById("status").textContent'), /Run to update/);
-    assert.equal(await js('document.getElementById("technical").textContent'), "");
+    assert.match(
+      await js('document.getElementById("status").textContent'),
+      /Run to update/,
+    );
+    assert.equal(
+      await js('document.getElementById("technical").textContent'),
+      "",
+    );
     await delay(100);
     assert.equal(posts.length, 1, "clear must never run");
     await js('document.getElementById("example").click()');
     await js('document.querySelector(".data-qubit").click()');
     await delay(100);
     assert.equal(posts.length, 1, "example and fault edits must never run");
-    await js('document.getElementById("reset").click(); document.getElementById("run").click()');
-    await until('!document.getElementById("play").disabled', "explicit clear run ready");
-    assert.equal(await js('JSON.parse(document.getElementById("technical").textContent).faults.length'), 0);
+    await js(
+      'document.getElementById("reset").click(); document.getElementById("run").click()',
+    );
+    await until(
+      '!document.getElementById("play").disabled',
+      "explicit clear run ready",
+    );
+    assert.equal(
+      await js(
+        'JSON.parse(document.getElementById("technical").textContent).faults.length',
+      ),
+      0,
+    );
     assert.deepEqual(errors, []);
-    // Remove usable evidence on failure, then recover through a real API request
-    // after interception is removed. This also works with a simulation-only server.
     await cdp("Fetch.enable", {
       patterns: [{ urlPattern: "*/api/run", requestStage: "Request" }],
     });
-    await js('document.getElementById("example").click(); document.getElementById("run").click()');
+    await js(
+      'document.getElementById("example").click(); document.getElementById("run").click()',
+    );
     await until(
       'document.getElementById("status").textContent.includes("Regression fixture: FPGA unavailable")',
       "source failure visible",
@@ -265,28 +306,59 @@ test(
       ),
     );
     await cdp("Fetch.disable");
-    await js('document.getElementById("example").click(); document.getElementById("run").click()');
+    await js(
+      'document.getElementById("example").click(); document.getElementById("run").click()',
+    );
     await until(
       '!document.getElementById("play").disabled',
       "source recovered",
     );
-    // Hold a real request to verify pending locks and late-response invalidation.
     holdRun = true;
-    await cdp("Fetch.enable", { patterns: [{ urlPattern: "*/api/run", requestStage: "Request" }] });
+    await cdp("Fetch.enable", {
+      patterns: [{ urlPattern: "*/api/run", requestStage: "Request" }],
+    });
     await js('document.getElementById("run").click()');
     for (let i = 0; !heldRequest && i < 100; i++) await delay(20);
     assert.ok(heldRequest);
-    assert.equal(await js('document.getElementById("run").disabled && document.getElementById("seed").disabled && document.querySelector(".data-qubit").disabled && document.getElementById("play").disabled'), true);
-    // Synthetic input bypasses native disabled controls; even this must be safe.
-    await js('document.getElementById("seed").value="7"; document.getElementById("seed").dispatchEvent(new Event("input"))');
+    assert.equal(
+      await js(
+        'document.getElementById("run").disabled && document.getElementById("seed").disabled && document.querySelector(".data-qubit").disabled && document.getElementById("play").disabled',
+      ),
+      true,
+    );
+    await js(
+      'document.getElementById("seed").value="7"; document.getElementById("seed").dispatchEvent(new Event("input"))',
+    );
+    assert.equal(
+      await js('document.getElementById("run").disabled'),
+      true,
+      "an invalidated request still blocks overlapping runs",
+    );
     await cdp("Fetch.continueRequest", { requestId: heldRequest });
     await cdp("Fetch.disable");
     await delay(200);
-    assert.equal(await js('document.getElementById("play").disabled'), true, "stale response cannot restore replay");
-    assert.match(await js('document.getElementById("status").textContent'), /Run to update/);
+    assert.equal(
+      await js('document.getElementById("play").disabled'),
+      true,
+      "stale response cannot restore replay",
+    );
+    assert.match(
+      await js('document.getElementById("status").textContent'),
+      /Run to update/,
+    );
+    await until(
+      '!document.getElementById("run").disabled',
+      "stale request finished",
+    );
     await js('document.getElementById("run").click()');
-    await until('!document.getElementById("play").disabled', "run after stale reply");
-    assert.match(await js('document.getElementById("run-summary").textContent'), /seed 7.*prediction.*observable.*cycles/);
+    await until(
+      '!document.getElementById("play").disabled',
+      "run after stale reply",
+    );
+    assert.match(
+      await js('document.getElementById("run-summary").textContent'),
+      /seed 7.*prediction.*observable.*cycles/,
+    );
     for (const width of [1280, 820, 760, 600, 390, 360]) {
       await cdp("Emulation.setDeviceMetricsOverride", {
         width,
@@ -307,7 +379,6 @@ test(
       );
     }
     if (process.env.QEC_STALE_URL) {
-      // Optional second endpoint: current assets backed by an intentionally old API.
       await cdp("Page.navigate", { url: process.env.QEC_STALE_URL });
       await until(
         'document.getElementById("status")?.textContent.includes("Restart the QEC web server")',

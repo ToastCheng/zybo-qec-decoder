@@ -1,12 +1,8 @@
-"""Check the central source guide and local links in maintained Markdown.
+"""Check the code guide and links in current documentation."""
 
-Run with ``python -m pytest scripts/test_source_docs.py -q``. Historical results
-and fixture snapshots retain their original documentation and are excluded.
-"""
-
-from pathlib import Path
 import re
 import subprocess
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,7 +10,7 @@ GUIDE = Path("docs/code-walkthrough.md")
 
 
 def maintained_documents():
-    """Include tracked and new docs, excluding deleted files and archives."""
+    """Find current documents, including uncommitted files."""
     output = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
         cwd=ROOT,
@@ -28,7 +24,7 @@ def maintained_documents():
 
 
 def local_link_paths(text):
-    """Extract inline Markdown paths without interpreting URL fragments as files."""
+    """Read local file paths from Markdown links."""
     for destination in re.findall(r"!?\[[^\]]*\]\(([^)]+)\)", text):
         destination = destination.split()[0].strip("<>")
         parsed = urlsplit(destination)
@@ -41,7 +37,13 @@ def test_central_walkthrough_is_linked_and_covers_source_directories():
     guide = ROOT / GUIDE
     assert guide.is_file(), f"Missing source guide: {GUIDE}"
     text = guide.read_text()
-    for directory in ("qec/", "rtl/", "scripts/", "vitis/", "constraints/"):
+    for directory in (
+        "qec/",
+        "fpga/rtl/",
+        "fpga/scripts/",
+        "fpga/vitis/",
+        "fpga/constraints/",
+    ):
         assert directory in text, f"Source guide omits {directory}"
     assert GUIDE.as_posix() in (ROOT / "README.md").read_text()
 
@@ -57,10 +59,12 @@ def test_maintained_markdown_local_links_resolve():
 
 def test_local_link_paths_excludes_urls_and_preserves_relative_paths():
     text = (
-        "[source](../qec/decoder.py#decode) [section](#rtl) "
+        "[source](../qec/surface/decoder.py#decode) [section](#fpga) "
         "[web](https://example.com/doc) ![image](images/example.png) "
         "[space](file%20name.md)"
     )
     assert list(local_link_paths(text)) == [
-        "../qec/decoder.py", "images/example.png", "file name.md"
+        "../qec/surface/decoder.py",
+        "images/example.png",
+        "file name.md",
     ]

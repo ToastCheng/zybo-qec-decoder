@@ -1,3 +1,0 @@
-# Optional compiler environment, tested with Python 3.12. Keep the base example unchanged.
--r requirements.txt
-tqec @ git+https://github.com/tqec/tqec.git@57b5c1ccfbfc6223f07c6775d432d6a87c08b68f

@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+cache_dir = "build/cache/pytest"
+testpaths = ["qec/tests", "scripts/test_source_docs.py"]
+norecursedirs = ["build", ".git", ".venv", "results"]
+
+[tool.ruff]
+cache-dir = "build/cache/ruff"
+extend-exclude = ["build", "qec/**/results"]

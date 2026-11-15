@@ -1,5 +1,3 @@
-// Offline state/schema checks: importing app.js exports helpers without DOM
-// setup. These tests do not exercise fetch, CSS, browser timers or hardware.
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -16,10 +14,17 @@ test("run settings use the fixed hardware-compatible template and independent no
     after_reset_flip_probability: 0.004,
   };
   assert.deepEqual(runSettings(noise, 20261107, faults), {
-    circuit: "surface_code:rotated_memory_z", distance: 3, rounds: 3,
-    noise, seed: 20261107, faults,
+    circuit: "surface_code:rotated_memory_z",
+    distance: 3,
+    rounds: 3,
+    noise,
+    seed: 20261107,
+    faults,
   });
-  assert.throws(() => runSettings({ ...noise, after_clifford_depolarization: 0.76 }, 1, []), /0.*0.75/);
+  assert.throws(
+    () => runSettings({ ...noise, after_clifford_depolarization: 0.76 }, 1, []),
+    /0.*0.75/,
+  );
   assert.throws(() => runSettings(noise, -1, []), /seed/i);
 });
 
@@ -61,7 +66,6 @@ test("rejects stale replay schema instead of breaking the render loop", () => {
 });
 
 test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults", () => {
-  // Include the extra host-overlay position and independent times on one qubit.
   const { LabState } = require(app);
   const s = new LabState(21);
   assert.equal(s.tick, 0);
@@ -90,7 +94,6 @@ test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults"
 });
 
 test("detectors stay unavailable before their measurement boundary, including backward scrub", () => {
-  // Availability is recomputed, not latched by visiting a later tick.
   const { visibleDetectors } = require(app);
   const ds = [
     { id: 0, available_tick: 7 },
@@ -102,7 +105,6 @@ test("detectors stay unavailable before their measurement boundary, including ba
 });
 
 test("minimal page exposes replay, fault time, speed and collapsed evidence", () => {
-  // Source-level hooks/order only; computed styles need the real-browser test.
   const html = fs.readFileSync(
     path.join(path.dirname(app), "index.html"),
     "utf8",
@@ -141,7 +143,16 @@ test("minimal page exposes replay, fault time, speed and collapsed evidence", ()
   assert.match(html, /1 Configure/);
   assert.match(html, /2 Simulate/);
   assert.match(html, /3 Replay/);
-  for (const id of ["run", "circuit-template", "seed", "after_clifford_depolarization", "before_round_data_depolarization", "before_measure_flip_probability", "after_reset_flip_probability", "run-summary"]) {
+  for (const id of [
+    "run",
+    "circuit-template",
+    "seed",
+    "after_clifford_depolarization",
+    "before_round_data_depolarization",
+    "before_measure_flip_probability",
+    "after_reset_flip_probability",
+    "run-summary",
+  ]) {
     assert.ok(html.includes(`id="${id}"`), id);
   }
   assert.match(html, /id="play"[^>]*>Replay/);

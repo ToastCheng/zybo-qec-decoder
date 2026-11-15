@@ -1,27 +1,7 @@
-# Generated tool output
 build/
-xsim.dir/
-.Xil/
-*.cache/
-*.hw/
-*.ip_user_files/
-*.runs/
-*.sim/
-*.srcs/
-*.xpr
-*.jou
-*.log
-*.str
-*.pb
-*.vcd
-*.wdb
-clockInfo.txt
-# Python environments/caches
 .venv/
 __pycache__/
-.pytest_cache/
 *.py[cod]
-# Editors
 .vscode/
 *.swp
 *.swo
