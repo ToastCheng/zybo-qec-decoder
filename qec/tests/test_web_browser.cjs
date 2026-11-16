@@ -138,6 +138,10 @@ test(
       "configuration keeps the lattice prominent on desktop",
     );
     assert.equal(posts.length, 0, "page load must never run");
+    // Observe API results in the test, without requiring a debug panel in the UI.
+    await js(
+      '(() => {const original=window.fetch;window.fetch=async (...args)=>{const response=await original(...args);if(args[1]?.method==="POST" && response.ok)window.__testRun=await response.clone().json();return response;}})()',
+    );
     assert.equal(await js('document.querySelector("#example")'), null);
     assert.equal(
       await js('document.querySelector("#scenario").textContent'),
@@ -223,12 +227,7 @@ test(
       ),
       "rgb(191, 230, 205)",
     );
-    assert.equal(
-      await js(
-        'JSON.parse(document.getElementById("technical").textContent).residual_observable',
-      ),
-      0,
-    );
+    assert.equal(await js("window.__testRun.residual_observable"), 0);
     assert.equal(
       await js('document.querySelectorAll(".detector.cleared").length'),
       2,
@@ -272,10 +271,7 @@ test(
       await js('document.getElementById("status").textContent'),
       /^$/,
     );
-    assert.equal(
-      await js('document.getElementById("technical").textContent'),
-      "",
-    );
+    assert.equal(await js('document.getElementById("technical")'), null);
     await delay(100);
     assert.equal(posts.length, 1, "clear must never run");
 
@@ -289,12 +285,7 @@ test(
       '!document.getElementById("play").disabled',
       "explicit clear run ready",
     );
-    assert.equal(
-      await js(
-        'JSON.parse(document.getElementById("technical").textContent).faults.length',
-      ),
-      0,
-    );
+    assert.equal(await js("window.__testRun.settings.faults.length"), 0);
     assert.deepEqual(errors, []);
     await cdp("Fetch.enable", {
       patterns: [{ urlPattern: "*/api/run", requestStage: "Request" }],
@@ -306,7 +297,7 @@ test(
     );
     assert.equal(await js('document.getElementById("play").disabled'), true);
     assert.match(
-      await js('document.getElementById("source").textContent'),
+      await js('document.getElementById("status").textContent'),
       /unavailable/,
     );
     assert.ok(
@@ -399,10 +390,7 @@ test(
         "stale server actionable error",
       );
       assert.equal(await js('document.getElementById("play").disabled'), true);
-      assert.equal(
-        await js('document.getElementById("source").textContent'),
-        "Unavailable",
-      );
+      assert.equal(await js('document.getElementById("source")'), null);
       assert.deepEqual(errors, []);
     }
     console.log(

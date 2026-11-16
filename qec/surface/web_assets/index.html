@@ -195,28 +195,9 @@
           </section>
         </section>
       </div>
-
       <details id="evidence">
         <summary>Details</summary>
-        <span id="source" hidden>Connecting…</span>
-        <p>
-          Surface-memory faults enter before the selected tick's operations.
-          Tick 22 is a host correction overlay, not a physical gate. FPGA
-          decodes complete windows; it returns prediction and measured cycles
-          only. Graph edges and representative Pauli replay are host-derived.
-          Replay is counterfactual, not live feedback. Custom circuits replay
-          their own wires, gates and detector availability; no representative
-          host correction is invented.
-        </p>
-        <pre id="technical"></pre>
-        <details>
-          <summary>Stim circuit</summary>
-          <pre id="circuit"></pre>
-        </details>
-        <details>
-          <summary>Host correction replay</summary>
-          <pre id="corrected-circuit"></pre>
-        </details>
+        <output id="run-summary" aria-live="polite"></output>
       </details>
     </main>
     <footer id="control-dock" aria-label="Simulation and replay controls">
@@ -253,7 +234,6 @@
             disabled
           />
         </div>
-        <output id="run-summary" aria-live="polite"></output>
       </div>
     </footer>
     <noscript>JavaScript required.</noscript>

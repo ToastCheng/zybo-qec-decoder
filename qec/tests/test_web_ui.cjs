@@ -106,7 +106,7 @@ test("detectors stay unavailable before their measurement boundary, including ba
   assert.deepEqual(visibleDetectors(ds, [0, 1], 8), [0]);
 });
 
-test("minimal page exposes replay, fault time, speed and collapsed evidence", () => {
+test("Details contains only the run summary, without explanatory dumps", () => {
   const html = fs.readFileSync(
     path.join(path.dirname(app), "index.html"),
     "utf8",
@@ -123,8 +123,6 @@ test("minimal page exposes replay, fault time, speed and collapsed evidence", ()
     "reset",
     "result",
     "status",
-    "source",
-    "evidence",
   ]) {
     assert.ok(html.includes(`id="${id}"`), id);
   }
@@ -132,7 +130,11 @@ test("minimal page exposes replay, fault time, speed and collapsed evidence", ()
   assert.ok(html.includes('aria-live="polite"'));
   assert.ok(!html.includes("See an error become"));
   assert.ok(!html.includes("<footer>"));
-  assert.ok(html.includes("Host correction"));
+  assert.doesNotMatch(html, /id="technical"|id="source"|counterfactual/);
+  assert.match(
+    html,
+    /<details id="evidence">\s*<summary>Details<\/summary>\s*<output id="run-summary"[^>]*><\/output>\s*<\/details>/,
+  );
   assert.ok(
     html.indexOf('id="play"') > html.indexOf('id="control-dock"'),
     "Play belongs to the fixed bottom dock",

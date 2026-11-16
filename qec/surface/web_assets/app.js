@@ -726,9 +726,7 @@ if (typeof document !== "undefined") {
     $("run-summary").textContent = result
       ? `Completed · ${result.source} · seed ${result.settings?.seed ?? experiment?.seed ?? "not reported"} · prediction ${result.prediction} · observable ${result.observable} · cycles ${cycleSummary(result)}`
       : "";
-    $("source").textContent = failure
-      ? `${layout.source} · unavailable`
-      : result?.source || layout.source;
+
     $("status").className = failure ? "failed" : "";
     $("status").textContent =
       failure ||
@@ -867,29 +865,7 @@ if (typeof document !== "undefined") {
       item.textContent = "No faults";
       $("scenario").append(item);
     }
-    $("technical").textContent = result
-      ? JSON.stringify(
-          {
-            source: result.source,
-            hardware: result.hardware,
-            reference_prediction: result.reference_prediction,
-            syndrome: result.syndrome,
-            observable: result.observable,
-            prediction: result.prediction,
-            host_frame: result.host_frame,
-            edges_source: "Host reference",
-            correction_edges: result.correction_edges,
-            correction: result.correction,
-            residual_syndrome: result.residual_syndrome,
-            residual_observable: result.residual_observable,
-            faults: state.faults,
-          },
-          null,
-          2,
-        )
-      : "";
-    $("circuit").textContent = result?.injected_circuit || "";
-    $("corrected-circuit").textContent = result?.corrected_circuit || "";
+
     renderDiagram(selectedCustom, tick);
     if (!layoutCurrent && !$("logical-text").value.trim()) {
       $("circuit-diagram").replaceChildren();
@@ -1048,7 +1024,6 @@ if (typeof document !== "undefined") {
       render();
     })
     .catch((e) => {
-      $("source").textContent = "Unavailable";
       $("status").className = "failed";
       $("status").textContent = e.message;
     });

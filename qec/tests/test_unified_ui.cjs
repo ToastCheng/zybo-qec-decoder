@@ -7,6 +7,10 @@ test("configuration and editor are collapsed and controls live in the bottom doc
     require("node:path").join(__dirname, "../surface/web_assets/index.html"),
     "utf8",
   );
+  assert.doesNotMatch(
+    html,
+    /id="technical"|id="corrected-circuit"|counterfactual|representative Pauli/,
+  );
   assert.match(html, /<details\s+id="configure"/);
   assert.match(html, /<summary id="configure-title">Configure<\/summary>/);
   assert.match(html, /id="control-dock"/);

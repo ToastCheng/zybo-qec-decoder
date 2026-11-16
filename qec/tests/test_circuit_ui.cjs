@@ -220,6 +220,20 @@ test(
     assert.equal(await js('document.querySelector("#advanced").open'), false);
     assert.equal(await js('document.querySelector("#evidence").open'), false);
     assert.equal(
+      await js('document.querySelector("#run-summary").closest("details").id'),
+      "evidence",
+    );
+    assert.equal(
+      await js('document.querySelector("#control-dock #run-summary")'),
+      null,
+    );
+    assert.equal(
+      await js(
+        'document.querySelectorAll("#evidence p, #evidence pre").length',
+      ),
+      0,
+    );
+    assert.equal(
       await js(
         'document.querySelectorAll("#circuit-diagram .circuit-wire").length',
       ),
@@ -309,6 +323,13 @@ test(
         await viewport(width);
         await assertPresetFits(choice + " at " + width);
         await js('document.querySelector("#configure").open=true');
+        assert.equal(
+          await js(
+            '(() => {const inputs=[...document.querySelectorAll("#configure input[type=number]")];const seed=document.querySelector("#seed").getBoundingClientRect().width;return inputs.every(e=>Math.abs(e.getBoundingClientRect().width-seed)<0.5)})()',
+          ),
+          true,
+          "all numeric settings match seed width",
+        );
         assert.equal(
           await js(
             'Math.abs(document.querySelector("#seed").getBoundingClientRect().top-document.querySelector("#added-noise").getBoundingClientRect().top)<1',
