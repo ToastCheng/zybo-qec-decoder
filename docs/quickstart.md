@@ -87,7 +87,9 @@ make load IMAGE_DIR=build/image
 
 `make load` loads the matching bitstream, ELF and XSA over JTAG. It programs
 volatile PL state and restarts ARM core 0; it does not write boot flash.
-Check the load log for successful programming and ARM startup.
+Check the load log for successful programming and ARM startup. The four user
+LEDs show mailbox ACK, decode-complete, operation error and returned-data bit 0;
+none is a logical-success light. See the [LED map](decoder-design.md#board-leds).
 
 ### 3. Open the web interface
 

@@ -16,10 +16,33 @@ module ps_bridge #(
         LAUNCH, WAIT_RESULT, ABORT_SHOT, ABORT_ACK
     } state_t;
     state_t state;
-    // Control: toggle[31], opcode[27:24], index[23:16], data[15:0].
-    // Status: matching toggle[31], decode complete[30], error[29], data[15:0].
-    // Keep control stable until the matching acknowledgement.
-    // Staging words hold counts[0:2], edge index[3], endpoints[4:5], mask[6:7].
+    // GPIO mailbox words (field widths are not drawn to scale).
+    // ctrl: ARM writes; keep stable until status.ACK matches ctrl.REQ.
+    //  31    30:28     27:24      23:16             15:0
+    // +-----+---------+----------+-----------------+------------------+
+    // | REQ | ignored | OPCODE   | INDEX           | DATA             |
+    // +-----+---------+----------+-----------------+------------------+
+    //    1       3         4              8                  16 bits
+    //
+    // status: PL writes; DONE is latched decode completion, not success.
+    //  31    30     29      28:16                   15:0
+    // +-----+------+-------+-----------------------+------------------+
+    // | ACK | DONE | ERROR | zero                  | READ_DATA        |
+    // +-----+------+-------+-----------------------+------------------+
+    //    1      1      1              13                     16 bits
+    // ERROR describes this acknowledgement. READ_DATA is metadata for op 7.
+    // Opcodes: 1=stage, 2=begin, 3=append, 4=commit, 5=syndrome,
+    //          6=decode, 7=metadata, 8=abort. See docs/decoder-design.md.
+    //
+    // Staging indices: 0=detectors, 1=edges, 2=observables, 3=edge index,
+    //                  4=endpoint A, 5=endpoint B, 6=mask low, 7=mask high.
+    // Observable mask assembled from staging[7:6]:
+    //  31                         16 15                              0
+    // +-----------------------------+---------------------------------+
+    // | staging[7]: mask high       | staging[6]: mask low            |
+    // +-----------------------------+---------------------------------+
+    // Syndrome write INDEX=w: DATA[b] is detector 16*w+b (b=0..15).
+    // Bits past detector_count must be zero.
     logic [15:0] staging [0:7];
     logic [WORDS*16-1:0] shot;
     logic [WORDS-1:0] written_words;
@@ -72,6 +95,17 @@ module ps_bridge #(
         .cycles(cycles)
     );
 
+    // Metadata words returned in status.READ_DATA (16 bits each):
+    //  index   0       1        2      3       4        5      6
+    //       +-------+--------+------+-------+--------+------+--------+
+    //       | ver=2 | max D  |max E | max O | used D |used E| used O |
+    //       +-------+--------+------+-------+--------+------+--------+
+    //  index   7       8       9      10      11      12      13     14
+    //       +-------+-------+-------+-------+-------+-------+-------+-------+
+    //       | valid |gen LO |gen HI |pred LO|pred HI|cyc LO |cyc HI | error |
+    //       +-------+-------+-------+-------+-------+-------+-------+-------+
+    // valid/error: bit 0 carries the flag; bits 15:1 are zero.
+    // Each HI/LO pair reconstructs {HI[15:0], LO[15:0]}; other indices error.
     always_comb begin
         all_words_written = 1;
         for (integer w = 0; w < WORDS; w = w + 1) begin

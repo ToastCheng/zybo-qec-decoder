@@ -70,6 +70,14 @@ module top_qec_soc #(
         .ctrl(ctrl),
         .status(status)
     );
-    // LEDs show acknowledgement, completion, error and status bit zero.
+    // User LEDs directly expose the last mailbox status, not logical success.
+    //       +-------------+-------------+-------------+------------------+
+    // LED   | 3 (D18)     | 2 (G14)     | 1 (M15)     | 0 (M14)          |
+    //       +-------------+-------------+-------------+------------------+
+    // bit   | status[31]  | status[30]  | status[29]  | status[0]        |
+    // role  | ACK phase   | decode DONE | op ERROR    | READ_DATA bit 0  |
+    //       +-------------+-------------+-------------+------------------+
+    // LED0 changes meaning with metadata INDEX; it is not prediction bit 0.
+    // DONE can be high on an errored decode. See docs/decoder-design.md.
     assign led = {status[31:29], status[0]};
 endmodule
