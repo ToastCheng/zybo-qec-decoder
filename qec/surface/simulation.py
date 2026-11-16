@@ -9,13 +9,17 @@ from pathlib import Path
 
 import stim
 
-from qec.surface.circuit import Capacities, _parse, compile_circuit
+from qec.surface.circuit import HOST_CAPACITIES, Capacities, _parse, compile_circuit
 from qec.surface.decoder import decode
 from qec.surface.host import GraphDecoder
+from qec.surface.partition import decode_chunks, partition_graph
 
 
 def _prepare(settings):
-    if not isinstance(settings, dict) or set(settings) - {"logical_circuit"} != {
+    if not isinstance(settings, dict) or set(settings) - {
+        "logical_circuit",
+        "faults",
+    } != {
         "circuit",
         "reference",
         "seed",
@@ -27,7 +31,8 @@ def _prepare(settings):
     p = settings["added_noise"]
     if type(p) not in (int, float) or not 0 <= p <= 0.75:
         raise ValueError("added_noise must be finite in 0..0.75")
-    circuit = _parse(settings["circuit"], Capacities())
+    circuit = _parse(settings["circuit"], HOST_CAPACITIES)
+    _validate_faults(circuit, settings.get("faults", []))
     if not p:
         return str(circuit), settings["reference"]
     noisy = stim.Circuit()
@@ -50,6 +55,35 @@ def _prepare(settings):
     return str(noisy), None
 
 
+def _validate_faults(circuit, faults):
+    """Validate injections before opening serial or starting shot simulation."""
+    if not isinstance(faults, list) or len(faults) > 64:
+        raise ValueError("faults must be a list of at most 64 records")
+    used = {
+        target.qubit_value
+        for op in circuit.flattened()
+        if op.name != "MPAD"
+        for target in op.targets_copy()
+        if target.is_qubit_target
+        or target.is_x_target
+        or target.is_y_target
+        or target.is_z_target
+    }
+    for fault in faults:
+        if (
+            not isinstance(fault, dict)
+            or set(fault) != {"tick", "qubit", "pauli"}
+            or type(fault["tick"]) is not int
+            or not 0 <= fault["tick"] <= circuit.num_ticks
+            or type(fault["qubit"]) is not int
+            or fault["qubit"] not in used
+            or fault["pauli"] not in ("X", "Y", "Z")
+        ):
+            raise ValueError(
+                "fault must specify a valid tick, used qubit and X/Y/Z Pauli"
+            )
+
+
 def _mask(bits):
     return sum(int(bit) << i for i, bit in enumerate(bits))
 
@@ -63,7 +97,7 @@ def _compile_bounded(settings, capacities=None):
             input=json.dumps(
                 {
                     "settings": settings,
-                    "capacities": asdict(capacities) if capacities else None,
+                    "capacities": asdict(capacities or HOST_CAPACITIES),
                 }
             ),
             text=True,
@@ -139,8 +173,19 @@ class CircuitExperiment:
             else:
                 segments[-1].append(op)
         trace = []
+        injected = stim.Circuit()
         for tick, segment in enumerate(segments):
+            if tick:
+                injected.append("TICK")
+            for fault in settings.get("faults", []):
+                if fault["tick"] == tick:
+                    injection = stim.CircuitInstruction(
+                        fault["pauli"] + "_ERROR", [fault["qubit"]], [1]
+                    )
+                    simulator.do(injection)
+                    injected.append(injection)
             simulator.do(segment)
+            injected += segment
             trace.append(
                 {
                     "tick": tick,
@@ -163,26 +208,27 @@ class CircuitExperiment:
             "seed": settings["seed"],
             "syndrome": syndrome,
             "observable_truth": truth,
+            "injected_circuit": str(injected),
+            "faults": settings.get("faults", []),
         }
         if self.serial_port:
             with GraphDecoder(self.serial_port) as board:
                 identity = board.identity()
-                limits = Capacities(
+                if circuit.num_observables > identity.max_observables:
+                    raise ValueError("Experiment exceeds FPGA observable capacity")
+                chunks = partition_graph(
+                    circuit.num_detectors,
+                    compiled["edges"],
                     max_detectors=identity.max_detectors,
                     max_edges=identity.max_edges,
-                    max_observables=identity.max_observables,
                 )
-                compiled = _compile_bounded(settings, limits)
-                loaded = board.load_graph(
-                    circuit.num_detectors, compiled["edges"], circuit.num_observables
+                measured = decode_chunks(
+                    board, chunks, circuit.num_observables, syndrome
                 )
-                answer = board.decode(syndrome)
                 result.update(
                     source="FPGA",
                     compiled=compiled,
-                    prediction=answer.prediction,
-                    cycles=answer.cycles,
-                    identity=list(loaded.words),
+                    **measured,
                     transactions=[
                         {
                             "opcode": t["opcode"],

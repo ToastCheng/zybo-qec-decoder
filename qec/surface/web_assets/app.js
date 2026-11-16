@@ -92,6 +92,7 @@ function circuitSettings(
   seed,
   addedNoise,
   logicalCircuit = "",
+  faults = [],
 ) {
   if (!circuit.trim()) throw Error("Enter an annotated Stim circuit.");
   if (!Number.isSafeInteger(seed) || seed < 0)
@@ -103,6 +104,7 @@ function circuitSettings(
     reference: reference.trim() ? reference : null,
     seed,
     added_noise: addedNoise,
+    ...(faults.length ? { faults: faults.map((fault) => ({ ...fault })) } : {}),
     ...(logicalCircuit.trim() ? { logical_circuit: logicalCircuit } : {}),
   };
 }
@@ -130,6 +132,13 @@ function physicalGrid(qubits) {
     width: Math.max(160, ...points.map((q) => q.x + 40)),
     height: Math.max(120, ...points.map((q) => q.y + 40)),
   };
+}
+function cycleSummary(result) {
+  const cycles = result.hardware?.cycles ?? result.cycles ?? "N/A (software)";
+  const count = result.hardware?.chunks?.length || 0;
+  return count > 1
+    ? `${cycles} (sum of ${count} core decodes; uploads excluded)`
+    : String(cycles);
 }
 const maskBit = (mask, index) => Math.floor(mask / 2 ** index) % 2;
 function productGroups(op) {
@@ -309,6 +318,7 @@ function suppliedDiagram(text) {
 }
 if (typeof module !== "undefined")
   module.exports = {
+    cycleSummary,
     circuitSettings,
     maskBit,
     productGroups,
@@ -326,7 +336,7 @@ if (typeof document !== "undefined") {
   const $ = (id) => document.getElementById(id);
   let layout,
     memoryLayout,
-    memoryFaults,
+    layoutCurrent = true,
     experiment,
     state,
     result,
@@ -380,8 +390,19 @@ if (typeof document !== "undefined") {
     state.seek(0);
     render();
   }
+  function selectedExample() {
+    return memoryLayout?.examples?.find(
+      (e) => e.id === $("circuit-template").value,
+    );
+  }
   async function simulate() {
-    if (!layout || pending || inFlight) return;
+    if (
+      !layout ||
+      pending ||
+      inFlight ||
+      selectedExample()?.decoder_compatible === false
+    )
+      return;
     stop();
     const id = ++requestId;
     pending = true;
@@ -390,7 +411,8 @@ if (typeof document !== "undefined") {
     failure = "";
     render();
     try {
-      const custom = $("circuit-template").value === "custom";
+      const custom =
+        $("circuit-template").value !== "surface_code:rotated_memory_z";
       const seed = $("seed").value === "" ? NaN : Number($("seed").value);
       const noise = Object.fromEntries(
         noiseKeys.map((key) => [
@@ -407,6 +429,7 @@ if (typeof document !== "undefined") {
               ? NaN
               : Number($("added-noise").value),
             $("logical-text").value,
+            state.faults,
           )
         : runSettings(noise, seed, state.faults);
       const data = await api(
@@ -428,7 +451,11 @@ if (typeof document !== "undefined") {
         layout = nextLayout;
         result = nextResult;
         experiment = data.experiment;
+        const faults = state.faults;
         state = new LabState(layout.ticks.length - 1, false);
+        state.faults = faults;
+        layoutCurrent = true;
+        $("fault-tick").max = state.lastTick;
         $("scrubber").max = state.endTick;
       } else result = validateReplay(data, layout.ticks.length);
       state.seek(0);
@@ -450,7 +477,13 @@ if (typeof document !== "undefined") {
   let diagramKey = "";
   function renderDiagram(custom, tick) {
     const logicalText = custom ? $("logical-text").value.trim() : "";
-    const key = JSON.stringify([layout, Boolean(experiment), logicalText]);
+    const verified = Boolean(result && layout.mapping_verified);
+    const key = JSON.stringify([
+      layout,
+      Boolean(experiment),
+      logicalText,
+      verified,
+    ]);
     if (key !== diagramKey) {
       diagramKey = key;
       if (!custom) {
@@ -468,9 +501,12 @@ if (typeof document !== "undefined") {
           true,
         );
       } else if (logicalText) {
-        $("diagram-title").textContent = "Logical circuit · as supplied";
-        $("diagram-note").textContent =
-          "Logical circuit as supplied · mapping not verified. Logical gate positions are not physical replay ticks.";
+        $("diagram-title").textContent = verified
+          ? "Known encoded example"
+          : "Logical circuit · as supplied";
+        $("diagram-note").textContent = verified
+          ? "Known encoded example · physical and logical inputs match the supplied encoding. Logical gate positions are not physical replay ticks."
+          : "Logical circuit as supplied · mapping not verified. Logical gate positions are not physical replay ticks.";
         try {
           const supplied = suppliedDiagram(logicalText);
           $("circuit-diagram").innerHTML = circuitDiagram(
@@ -541,11 +577,23 @@ if (typeof document !== "undefined") {
     $("back").disabled = !result || pending || state.tick === 0;
     $("step").disabled = !result || pending || state.tick > state.lastTick;
     $("play").disabled = pending || !result;
-    $("run").disabled = pending || inFlight;
+    const example = selectedExample();
+    const unsupported = example?.decoder_compatible === false;
+    $("circuit-warning").hidden = !example;
+    $("circuit-warning").className = unsupported ? "failed" : "";
+    $("circuit-warning").textContent = example
+      ? [
+          example.semantic_adaptation,
+          example.noise_model || example.decoder_limitation,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : "";
+    $("run").disabled = pending || inFlight || unsupported;
     $("run").textContent = pending ? "Running…" : "Run";
     document
       .querySelectorAll(
-        "#configure input, #configure select, #configure button, #circuit-editor input, #circuit-editor textarea",
+        "#configure input, #configure select, #configure button, #circuit-editor input, #circuit-editor textarea, #circuit-editor select, .toolbar input, .toolbar button",
       )
       .forEach((control) => {
         control.disabled = pending;
@@ -555,7 +603,7 @@ if (typeof document !== "undefined") {
         ? "2 Simulate + FPGA decode"
         : "2 Simulate + software decode";
     $("run-summary").textContent = result
-      ? `Completed · ${result.source} · seed ${result.settings?.seed ?? experiment?.seed ?? "not reported"} · prediction ${result.prediction} · observable ${result.observable} · cycles ${result.hardware?.cycles ?? result.cycles ?? "N/A (software)"}`
+      ? `Completed · ${result.source} · seed ${result.settings?.seed ?? experiment?.seed ?? "not reported"} · prediction ${result.prediction} · observable ${result.observable} · cycles ${cycleSummary(result)}`
       : "";
     $("source").textContent = failure
       ? `${layout.source} · unavailable`
@@ -563,13 +611,17 @@ if (typeof document !== "undefined") {
     $("status").className = failure ? "failed" : "";
     $("status").textContent =
       failure ||
+      (unsupported
+        ? "Selected encoded circuit is not supported by the graph-only decoder. See the circuit limitation above."
+        : "") ||
       (pending
         ? "Simulating + decoding…"
         : result
           ? "Ready to replay · no new decoder requests"
           : "Run to update · configure settings or select faults, then press Run");
     const custom = layout.kind === "circuit";
-    const selectedCustom = $("circuit-template").value === "custom";
+    const selectedCustom =
+      $("circuit-template").value !== "surface_code:rotated_memory_z";
     const grid = custom ? physicalGrid(layout.data) : null;
     const pointById = new Map(grid?.points.map((q) => [q.id, q]) || []);
     $("lattice").classList.toggle("index-lattice", custom);
@@ -595,7 +647,7 @@ if (typeof document !== "undefined") {
       });
     $("lattice").innerHTML =
       `<svg viewBox="0 0 720 720" aria-hidden="true">${corrected ? "" : links.join("")}</svg>`;
-    for (const q of [...layout.data, ...layout.checks]) {
+    for (const q of layoutCurrent ? [...layout.data, ...layout.checks] : []) {
       const data = !q.basis;
       const button = document.createElement("button");
       const fault = frame[q.id] || "",
@@ -617,7 +669,7 @@ if (typeof document !== "undefined") {
       button.setAttribute(
         "aria-label",
         data
-          ? `Physical qubit ${q.id}, ${fault || "I"}${fix ? ", host correction " + fix : ""}${custom ? "" : `. Inject ${pauli} at tick ${$("fault-tick").value}`}`
+          ? `Physical qubit ${q.id}, ${fault || "I"}${fix ? ", host correction " + fix : ""}${`. Inject ${pauli} at tick ${$("fault-tick").value}`}`
           : `${q.basis} check ${q.id}${fired ? ", detector flip" : ""}`,
       );
       const gates = corrected
@@ -626,7 +678,7 @@ if (typeof document !== "undefined") {
             .filter((op) => op.targets.includes(q.id))
             .map((op) => op.name);
       button.innerHTML = `<span>${data ? "q" : q.basis}${q.id}</span><b>${corrected ? residual || (data ? "I" : "·") : fault || (fired ? "1" : "·")}</b>${gates.length ? `<em>${gates.join("/")}</em>` : ""}${fix ? `<small>+${fix}</small>` : ""}`;
-      if (data && !custom) {
+      if (data) {
         button.disabled = pending;
         const selected = state.faults.some(
           (f) => f.qubit === q.id && f.tick === Number($("fault-tick").value),
@@ -708,10 +760,32 @@ if (typeof document !== "undefined") {
           ? "success"
           : "failed"
         : "";
-    document.querySelector(".toolbar").hidden = selectedCustom;
-    $("scenario").textContent = !state.faults.length
-      ? "No faults · click a data qubit to inject"
-      : `${state.faults.length === 1 && state.faults[0].tick === 8 && state.faults[0].qubit === 10 && state.faults[0].pauli === "X" ? "Example" : "Injected"} · ${state.faults.map((f) => `${f.pauli} on q${f.qubit} at tick ${f.tick}`).join(" · ")}`;
+    $("physical-scroll").hidden = !layoutCurrent;
+    $("boundary-note").hidden = custom || !layoutCurrent;
+    $("timeline").hidden = !layoutCurrent;
+    $("operations").hidden = !layoutCurrent;
+    if (!layoutCurrent) {
+      $("grid-note").textContent =
+        "Run to compile the selected circuit's physical layout, then click a qubit to inject.";
+      $("tick-label").textContent = "Physical layout pending Run";
+    }
+    document
+      .querySelectorAll(".toolbar button, .toolbar input")
+      .forEach((c) => {
+        c.disabled = pending || !layoutCurrent;
+      });
+    $("example").hidden = selectedCustom;
+    $("scenario").replaceChildren();
+    for (const fault of state.faults) {
+      const item = document.createElement("li");
+      item.textContent = `${!selectedCustom && fault.tick === 8 && fault.qubit === 10 && fault.pauli === "X" ? "Example · " : ""}${fault.pauli} on q${fault.qubit} at tick ${fault.tick}`;
+      $("scenario").append(item);
+    }
+    if (!state.faults.length) {
+      const item = document.createElement("li");
+      item.textContent = "No faults · click a physical qubit to inject";
+      $("scenario").append(item);
+    }
     $("technical").textContent = result
       ? JSON.stringify(
           {
@@ -735,7 +809,14 @@ if (typeof document !== "undefined") {
       : "";
     $("circuit").textContent = result?.injected_circuit || "";
     $("corrected-circuit").textContent = result?.corrected_circuit || "";
-    renderDiagram(custom, tick);
+    renderDiagram(selectedCustom, tick);
+    if (!layoutCurrent && !$("logical-text").value.trim()) {
+      $("circuit-diagram").replaceChildren();
+      $("diagram-note").textContent =
+        "Run to compile and display the input circuit.";
+    }
+    for (const key of noiseKeys) $(key).disabled = pending || selectedCustom;
+    $("added-noise").disabled = pending || !selectedCustom;
   }
   document.querySelectorAll("[data-pauli]").forEach(
     (b) =>
@@ -752,29 +833,43 @@ if (typeof document !== "undefined") {
   $("run").onclick = simulate;
   $("circuit-template").onchange = () => {
     if (!state) return;
-    if (layout.kind !== "circuit")
-      memoryFaults = state.faults.map((f) => ({ ...f }));
-    if ($("circuit-template").value !== "custom") {
-      layout = memoryLayout;
-      state = new LabState(layout.ticks.length - 1);
-      state.faults = memoryFaults || [];
-      $("scrubber").max = state.endTick;
-      $("fault-tick").max = state.lastTick;
+    const choice = $("circuit-template").value;
+    const memory = choice === "surface_code:rotated_memory_z";
+    const example = memoryLayout.examples?.find((e) => e.id === choice);
+    if (memory || example) {
+      $("circuit-text").value = memory ? memoryLayout.circuit : example.circuit;
+      $("logical-text").value = memory ? "" : example.logical_circuit || "";
+      $("reference-text").value = "";
+    } else {
+      $("reference-text").value = "";
+      $("logical-text").value = "";
     }
+    layout = memoryLayout;
+    layoutCurrent = memory;
+    state = new LabState(layout.ticks.length - 1, memory);
+    $("fault-tick").value = 0;
+    $("scrubber").max = state.endTick;
+    $("fault-tick").max = state.lastTick;
+    diagramKey = "";
     invalidate();
   };
   document
     .querySelectorAll(
-      ".settings input, .settings select, #circuit-editor input, #circuit-editor textarea",
+      ".settings input, #circuit-editor input, #circuit-editor textarea",
     )
     .forEach((control) => {
       control.oninput = () => {
-        if (state) invalidate();
+        if (!state) return;
+        if (control.id === "circuit-text") {
+          if ($("circuit-template").value === "surface_code:rotated_memory_z")
+            $("reference-text").value = memoryLayout.reference_circuit || "";
+          $("circuit-template").value = "custom";
+          layoutCurrent = false;
+          state.faults = [];
+        }
+        invalidate();
       };
-      if (control.id !== "circuit-template")
-        control.onchange = () => {
-          if (state) invalidate();
-        };
+      control.onchange = control.oninput;
     });
   $("back").onclick = () => {
     if (!result || pending) return;
@@ -838,6 +933,22 @@ if (typeof document !== "undefined") {
   api("/api/layout")
     .then((data) => {
       layout = memoryLayout = validateLayout(data);
+      $("circuit-text").value = data.circuit || "";
+      $("reference-text").value = data.reference_circuit || "";
+      for (const example of data.examples || []) {
+        if (
+          example.id === "surface_code:rotated_memory_z" ||
+          example.id === "memory"
+        )
+          continue;
+        const option = document.createElement("option");
+        option.value = example.id;
+        option.textContent = example.label;
+        $("circuit-template").insertBefore(
+          option,
+          $("circuit-template").lastElementChild,
+        );
+      }
       state = new LabState(data.ticks.length - 1);
       state.toggle(10, "X", 8);
       $("fault-tick").value = 8;

@@ -82,7 +82,7 @@ def test_editor_layout_and_real_memory_run():
 def test_general_editor_layout(name, qubits):
     response = EditorLab().circuit_run(
         {
-            "circuit": (ROOT / f"qec/examples/{name}.stim").read_text(),
+            "circuit": (ROOT / f"qec/tests/fixtures/bare_{name}.stim").read_text(),
             "reference": None,
             "seed": 1,
             "added_noise": 0,

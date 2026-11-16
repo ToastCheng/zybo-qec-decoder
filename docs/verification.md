@@ -27,6 +27,48 @@ The [quick start screenshot](images/web-fpga-layout.png) shows the unified UI
 with a real FPGA result. These checks are separate from the older six-graph
 archive described below.
 
+## Encoded examples and component windows
+
+The default examples now contain real distance-3 rotated surface-code patches:
+Bell uses 34 physical qubits, 144 detectors and 340 graph edges; the six-patch
+echo uses 102 physical qubits, 720 detectors and 1,716 edges. Each patch uses nine
+data qubits and eight reused extraction ancillas. The [example guide](../qec/examples/README.md)
+states the semantic adaptations, nonlocal transversal-CX assumption and restricted
+storage/readout noise model. These results do not verify faulty-gate protocols
+or an arbitrary logical compiler.
+
+Every distinct raw single-fault graph signature was checked against the actual
+unweighted UF reference: 340 Bell cases and 1,716 echo cases, with no decode or
+observable-mask mismatches. Exact raw signatures also match the compiled graph;
+unsupported circuit-level correlations remain rejected. The software run with
+128 shots and seed 42 had zero Bell logical failures and one echo logical failure.
+Both had zero reference mismatches. The quick-start echo run at seed 123 had zero
+logical failures in 128 shots. These are finite samples, not threshold estimates.
+
+On the already loaded FPGA image, both examples completed eight-shot CLI batches
+at seed 42 with zero logical failures and zero reference mismatches. Bell used
+two exact disconnected-component windows per shot; echo used six. Independent
+archive checks validated framing, lengths, CRC32, sequence, returned status and
+mask/cycle recombination for all 169 Bell transactions (16 core decodes) and
+625 echo transactions (48 core decodes). Raw evidence is under
+`build/verification/encoded-examples/` on the build machine, including
+`verification.json`, `wire-verified.json` and per-example shot/wire archives.
+No board reprogramming or flash write was needed for these runs.
+
+The physical-FPGA web path also completed both encoded examples, displaying
+34 physical/two logical wires and 102 physical/six logical wires respectively.
+Bell fault editing retained a listed Z injection on q0 at tick 8; its subsequent
+Run matched the simulated observable. Replay added no POST requests. The echo
+web run reported prediction 0, observable 0 and 11,551 summed core cycles over
+six windows. Reported cycle sums exclude graph upload and UART time.
+
+![Encoded Bell on the physical FPGA, with injection controls below the layout](images/encoded-bell-fpga.png)
+
+Software regressions passed 226 tests; the 18 browser checks include both
+runnable encoded dropdown choices, local edits/replay, fault lists, 32-bit masks,
+all-qubit scrolling and mobile layout. The tested default noise model is shown
+beside the selected preset in the UI.
+
 ## Built image
 
 Actual Vivado/Vitis 2025.2 artifacts are in `build/runtime-image-v2/` on the build machine:

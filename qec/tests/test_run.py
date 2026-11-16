@@ -6,7 +6,7 @@ import pytest
 import stim
 
 ROOT = Path(__file__).resolve().parents[2]
-EXAMPLE = ROOT / "qec/examples/phase_bell.stim"
+EXAMPLE = ROOT / "qec/tests/fixtures/bare_phase_bell.stim"
 
 
 def test_software_run_archives_actual_seeded_shots(tmp_path):

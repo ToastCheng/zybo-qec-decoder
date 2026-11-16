@@ -70,7 +70,7 @@ def test_fake_serial_orchestration_not_physical_hardware(monkeypatch):
 
     monkeypatch.setattr(module, "GraphDecoder", Fake, raising=False)
     lab = module.CircuitExperiment(serial_port="FAKE-NOT-A-BOARD")
-    cfg = settings((ROOT / "qec/examples/phase_bell.stim").read_text())
+    cfg = settings((ROOT / "qec/tests/fixtures/bare_phase_bell.stim").read_text())
     assert lab.validate(cfg)["counts"]["qubits"] == 2
     assert events == []
     with pytest.raises(ValueError):
@@ -141,7 +141,7 @@ OBSERVABLE_INCLUDE(1) rec[-1]
     assert result["trace"][-1]["detectors"] == [True, True]
     assert result["trace"][-1]["paulis"][0] == "X"
     assert result["trace"][0]["detectors"] == []
-    other = (ROOT / "qec/examples/phase_bell.stim").read_text()
+    other = (ROOT / "qec/tests/fixtures/bare_phase_bell.stim").read_text()
     assert lab.run(settings(other))["compiled"]["counts"]["qubits"] == 2
 
 
@@ -150,7 +150,7 @@ def test_checked_in_examples_execute_real_stim_and_software(name):
     result = (
         api()
         .CircuitExperiment()
-        .run(settings((ROOT / f"qec/examples/{name}.stim").read_text()))
+        .run(settings((ROOT / f"qec/tests/fixtures/bare_{name}.stim").read_text()))
     )
     assert result["source"] == "Software"
     assert result["compiled"]["counts"]["observables"] == 2

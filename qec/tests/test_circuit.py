@@ -18,7 +18,7 @@ import stim
 def test_examples_real_stim_and_matching(name, qubits, detectors, edges):
     from qec.surface.circuit import compile_circuit
 
-    text = (Path(__file__).parents[1] / "examples" / (name + ".stim")).read_text()
+    text = (Path(__file__).parent / "fixtures" / ("bare_" + name + ".stim")).read_text()
     b = compile_circuit(text)
     assert b["counts"]["qubits"] == qubits
     assert b["counts"]["detectors"] == detectors

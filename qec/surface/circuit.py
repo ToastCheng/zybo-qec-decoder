@@ -25,6 +25,9 @@ class Capacities:
     max_work: int = 20000000
 
 
+HOST_CAPACITIES = Capacities(max_detectors=1024, max_edges=8192)
+
+
 def _preflight(text, limits):
     """Bound source size and expanded work before Stim parses the input."""
     if not isinstance(text, str):

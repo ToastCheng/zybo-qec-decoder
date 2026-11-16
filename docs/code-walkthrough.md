@@ -35,7 +35,10 @@ An empty graph needs an explicit compatible noisy reference.
 Stim samples detector bits and observable truth. Detector i occupies syndrome
 bit i. Without a serial port, [decoder.py](../qec/surface/decoder.py) decodes in
 Python. With a port, [host.py](../qec/surface/host.py) reads capacities, uploads
-the graph and submits detector vectors. Observable truth stays on the host.
+the graph and submits detector vectors. For larger disconnected graphs,
+[partition.py](../qec/surface/partition.py) packs whole components into hardware
+windows without cutting edges, then XORs their returned masks. Observable truth
+stays on the host.
 The runner checks logical accuracy against Stim and implementation agreement
 against Python separately.
 
@@ -56,7 +59,11 @@ The browser assets in [web_assets/](../qec/surface/web_assets/) display the circ
 and all used physical qubits. A known memory preset has logical-memory semantics;
 general annotated physical input needs an explicit logical description/mapping
 before a logical interpretation can be claimed. Supplied logical text is labeled
-as supplied, not certified as an encoding.
+as supplied, not certified as an encoding. The fixed Bell/echo generator in
+[encoded.py](../qec/surface/encoded.py) supplies tested logical/physical pairs;
+the UI recognizes those pairs but does not certify arbitrary edited mappings.
+See the [example assumptions](../qec/examples/README.md) before changing noise
+or gate semantics.
 
 Opening the page and editing settings must not access hardware. Explicit Run
 simulates and decodes; Replay, stepping and scrubbing use the completed trace.

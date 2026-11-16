@@ -53,7 +53,7 @@ def test_general_editor_uses_real_serial_graph_transactions(name, qubits):
     text = (
         "R 0\nX_ERROR(1) 0\nM 0\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(31) rec[-1]"
         if name == "bit31"
-        else (Path(__file__).parents[1] / f"examples/{name}.stim").read_text()
+        else (Path(__file__).parent / f"fixtures/bare_{name}.stim").read_text()
     )
     device = OracleDevice()
     with pty_device(device) as (port, requests):

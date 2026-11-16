@@ -4,15 +4,25 @@ const fs = require("node:fs");
 const path = require("node:path");
 const app = require("../surface/web_assets/app.js");
 
-test("custom circuit controls are collapsed and leave the old workspace primary", () => {
+test("circuit dropdown and visible Stim editor share a section separate from parameters", () => {
   const html = fs.readFileSync(
     path.join(__dirname, "../surface/web_assets/index.html"),
     "utf8",
   );
-  assert.match(html, /<details id="circuit-editor">/);
+  assert.match(html, /<section\s+id="circuit-editor"/);
   assert.ok(
-    html.indexOf('id="circuit-editor"') > html.indexOf('class="workspace"'),
+    html.indexOf('id="circuit-template"') < html.indexOf('id="circuit-text"'),
   );
+  assert.ok(
+    html.indexOf('id="circuit-text"') < html.indexOf('class="settings"'),
+  );
+  assert.ok(html.indexOf('id="added-noise"') > html.indexOf('id="configure"'));
+  assert.match(html, /<details id="advanced">/);
+  assert.match(html, /<ul id="scenario"/);
+  assert.ok(
+    html.indexOf('class="toolbar"') > html.indexOf('id="physical-scroll"'),
+  );
+  assert.match(html, /Measurement boundaries/);
   for (const id of ["circuit-text", "reference-text", "added-noise"])
     assert.ok(html.includes(`id="${id}"`));
   assert.match(html, /value="custom">Custom Clifford circuit/);
@@ -31,6 +41,25 @@ test("custom circuit settings preserve annotated Stim and explicit nullable refe
   assert.throws(() => app.circuitSettings("", "", 1, 0), /circuit/i);
   assert.throws(() => app.circuitSettings(text, "", NaN, 0), /seed/i);
   assert.throws(() => app.circuitSettings(text, "", 1, 1), /0.*0.75/);
+});
+
+test("chunked hardware cycles are labeled as summed core cycles, excluding uploads", () => {
+  assert.equal(
+    app.cycleSummary({ hardware: { cycles: 123, chunks: [{}, {}] } }),
+    "123 (sum of 2 core decodes; uploads excluded)",
+  );
+  assert.equal(
+    app.cycleSummary({ hardware: { cycles: 42, chunks: [{}] } }),
+    "42",
+  );
+  assert.equal(app.cycleSummary({ cycles: 0 }), "0");
+});
+
+test("custom circuit settings copy injected faults without mutating caller state", () => {
+  const faults = [{ tick: 1, qubit: 0, pauli: "Y" }];
+  const settings = app.circuitSettings("R 0\nTICK\nM 0", "", 4, 0, "", faults);
+  assert.deepEqual(settings.faults, faults);
+  assert.notEqual(settings.faults[0], faults[0]);
 });
 
 test("generic replay ends at the last physical tick without a fabricated correction", () => {

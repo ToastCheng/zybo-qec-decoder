@@ -627,6 +627,39 @@ main {
   padding-top: 8px;
   padding-bottom: 8px;
 }
+#circuit-editor .template {
+  max-width: 100%;
+}
+#circuit-editor select {
+  width: 100%;
+  min-width: 0;
+}
+#circuit-text {
+  max-height: 240px;
+}
+.physical .toolbar {
+  padding: 14px 18px 0;
+  border-top: 1px solid var(--line);
+}
+#scenario {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: 18px;
+}
+#boundary-note,
+#noise-note {
+  padding: 0 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+#noise-note {
+  padding: 0;
+  margin: 4px 0 10px;
+}
+.settings label:first-child,
+.settings label:nth-child(2) {
+  grid-column: span 2;
+}
 @media (prefers-reduced-motion: no-preference) {
   .qubit,
   .detector {

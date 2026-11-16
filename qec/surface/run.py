@@ -9,9 +9,10 @@ from pathlib import Path
 
 import stim
 
-from qec.surface.circuit import Capacities, compile_circuit
+from qec.surface.circuit import HOST_CAPACITIES, compile_circuit
 from qec.surface.decoder import decode
 from qec.surface.host import GraphDecoder
+from qec.surface.partition import decode_chunks, partition_graph
 
 
 def _write_json(path, value):
@@ -35,12 +36,15 @@ def run_circuit(
         raise ValueError("shots must be an integer in 1..4096")
     if type(seed) is not int or not 0 <= seed < 2**64:
         raise ValueError("seed must be an unsigned 64-bit integer")
-    compiled = compile_circuit(text, reference_text=reference_text)
+    compiled = compile_circuit(
+        text, reference_text=reference_text, capacities=HOST_CAPACITIES
+    )
     destination = Path(out) if out is not None else None
     if destination is not None:
         destination.mkdir(parents=True, exist_ok=False)
     source = "FPGA" if port is not None else "Software"
     board = None
+    chunks = []
     completed = 0
     failures = 0
     mismatches = 0
@@ -49,19 +53,21 @@ def run_circuit(
             if port is not None:
                 board = stack.enter_context(decoder_factory(port))
                 identity = board.identity()
-                capacities = Capacities(
-                    max_detectors=identity.max_detectors,
-                    max_edges=identity.max_edges,
-                    max_observables=identity.max_observables,
-                )
-                compiled = compile_circuit(
-                    text, reference_text=reference_text, capacities=capacities
-                )
-                board.load_graph(
+                if compiled["counts"]["observables"] > identity.max_observables:
+                    raise ValueError("Experiment exceeds FPGA observable capacity")
+                chunks = partition_graph(
                     compiled["counts"]["detectors"],
                     compiled["edges"],
-                    compiled["counts"]["observables"],
+                    max_detectors=identity.max_detectors,
+                    max_edges=identity.max_edges,
                 )
+                compiled["hardware_windows"] = chunks
+                if len(chunks) == 1:
+                    board.load_graph(
+                        len(chunks[0]["indices"]),
+                        chunks[0]["edges"],
+                        compiled["counts"]["observables"],
+                    )
             if destination is not None:
                 _write_json(destination / "circuit.json", compiled)
                 rows = stack.enter_context((destination / "shots.jsonl").open("x"))
@@ -77,7 +83,14 @@ def run_circuit(
                 syndrome = sum(int(bit) << i for i, bit in enumerate(detector_bits))
                 observable = sum(int(bit) << i for i, bit in enumerate(observable_bits))
                 reference = decode(circuit.num_detectors, compiled["edges"], syndrome)
-                if board is not None:
+                component_evidence = None
+                if board is not None and len(chunks) > 1:
+                    measured = decode_chunks(
+                        board, chunks, circuit.num_observables, syndrome
+                    )
+                    prediction, cycles = measured["prediction"], measured["cycles"]
+                    component_evidence = measured["hardware_chunks"]
+                elif board is not None:
                     answer = board.decode(syndrome)
                     if (
                         answer.decode_error
@@ -110,6 +123,8 @@ def run_circuit(
                     "reference_mismatch": mismatch,
                     "logical_error": logical_error,
                 }
+                if component_evidence is not None:
+                    row["hardware_chunks"] = component_evidence
                 if rows is not None:
                     rows.write(json.dumps(row) + "\n")
                     rows.flush()
@@ -144,7 +159,7 @@ def run_circuit(
                     "python": platform.python_version(),
                     "machine": platform.machine(),
                     "files": hashes,
-                    "timing_scope": "FPGA acceptance to result cycles; excludes host, UART and graph upload",
+                    "timing_scope": "Sum of measured FPGA per-window core cycles; excludes host, UART and graph upload",
                     "limitations": compiled["limitations"],
                 },
             )

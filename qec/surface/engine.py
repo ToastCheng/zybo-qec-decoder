@@ -20,6 +20,8 @@ def _hardware(experiment):
         "rx_hex": transaction["rx_hex"],
         "protocol": "graph-v2",
         "transactions": experiment["transactions"],
+        "chunks": experiment.get("hardware_chunks", []),
+        "cycle_scope": "sum of per-window FPGA core cycles; excludes uploads and UART",
     }
 
 
@@ -69,8 +71,14 @@ class EditorLab:
         self.serial_port = serial_port
 
     def layout(self):
-        layout = Lab().layout()
+        from qec.surface.encoded import examples
+
+        model = Lab()
+        layout = model.layout()
         layout.update(
+            circuit=str(model.clean),
+            reference_circuit=model.reference,
+            examples=examples(),
             protocol="graph-v2",
             source="FPGA" if self.serial_port else "Software",
             serial_configured=bool(self.serial_port),
@@ -142,12 +150,30 @@ class EditorLab:
         return result
 
     def circuit_run(self, settings):
+        from qec.surface.encoded import examples
+
         experiment = CircuitExperiment(self.serial_port).run(settings)
         layout = _layout(
             stim.Circuit(experiment["compiled"]["circuit"]),
             experiment["source"],
             experiment["compiled"].get("logical_circuit"),
         )
+        if settings.get("logical_circuit"):
+            physical = stim.Circuit(settings["circuit"]).without_noise()
+            logical = stim.Circuit(settings["logical_circuit"])
+            for entry in examples():
+                if physical == stim.Circuit(
+                    entry["circuit"]
+                ).without_noise() and logical == stim.Circuit(entry["logical_circuit"]):
+                    layout.update(
+                        mapping_verified=True,
+                        encoded_example=entry["id"],
+                        mapping=entry["label"],
+                        code=entry["label"],
+                        noise_model=entry.get("noise_model"),
+                        semantic_adaptation=entry.get("semantic_adaptation"),
+                    )
+                    break
         trace = [
             {
                 "tick": t["tick"],
@@ -174,6 +200,6 @@ class EditorLab:
             "correction_frame": {},
             "residual_syndrome": None,
             "residual_observable": None,
-            "injected_circuit": experiment["compiled"]["circuit"],
+            "injected_circuit": experiment["injected_circuit"],
         }
         return {"layout": layout, "result": result, "experiment": experiment}

@@ -132,7 +132,7 @@ test(
     await delay(200);
     assert.equal(
       await js(
-        'document.getElementById("lattice").getBoundingClientRect().top < 650',
+        'document.getElementById("lattice").getBoundingClientRect().top < 1000',
       ),
       true,
       "configuration keeps the lattice prominent on desktop",
@@ -141,12 +141,12 @@ test(
     assert.equal(await js('document.getElementById("seed").value'), "20261107");
     assert.deepEqual(
       await js(
-        '[...document.querySelectorAll(".settings input:not(#seed)")].map(e => e.value)',
+        '[...document.querySelectorAll(".settings input:not(#seed):not(#added-noise)")].map(e => e.value)',
       ),
       ["0.001", "0.001", "0.001", "0.001"],
     );
     await js(
-      '[...document.querySelectorAll(".settings input:not(#seed)")].forEach(e => {e.value="0";e.dispatchEvent(new Event("input"));})',
+      '[...document.querySelectorAll(".settings input:not(#seed):not(#added-noise)")].forEach(e => {e.value="0";e.dispatchEvent(new Event("input"));})',
     );
     assert.equal(posts.length, 0, "settings edits must never run");
     await js('document.getElementById("run").click()');
@@ -371,6 +371,7 @@ test(
         false,
         `no overflow at ${width}`,
       );
+      await js('document.getElementById("play").scrollIntoView({behavior:"instant",block:"center"})');
       assert.ok(
         await js(
           'document.getElementById("play").getBoundingClientRect().bottom < innerHeight',

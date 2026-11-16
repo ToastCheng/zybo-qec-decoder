@@ -156,6 +156,23 @@ a new begin. Busy or held-result writes are rejected. Shot abort preserves the
 committed graph; full reset clears it. Each shot must rewrite every active
 syndrome word. Unused high syndrome bits must be zero.
 
+## Disconnected components larger than one hardware window
+
+The web and CLI host limits allow up to 1,024 detectors and 8,192 edges. The
+FPGA still accepts only its advertised per-window capacity. When a larger graph
+contains disconnected detector components, the host can pack whole components
+into several windows and upload/decode them in sequence on the same image.
+The common boundary does not connect components for this purpose: boundary
+clusters never drive growth, and no boundary parity constraint is enforced.
+
+Detector indices are remapped within each window. Edge order and global
+observable-mask bits are preserved. The final prediction XORs the independently
+returned masks. No detector-to-detector edge is cut; a single component that
+exceeds capacity is rejected. The response records each window's detector map,
+edges, syndrome, prediction and measured cycles. Reported total cycles sum these
+core measurements and exclude graph uploads, UART and host work. Partitioning
+does not make non-graphlike or correlated logical components representable.
+
 ## PS/PL mailbox register layout
 
 ARM firmware and the PL bridge exchange 32-bit words through AXI GPIO in one

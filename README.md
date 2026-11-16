@@ -20,6 +20,14 @@ contacting the decoder. The single web entry point is `python -m qec.surface.web
 on port 8765. Software mode runs the Python reference; FPGA mode requires the
 matching loaded image and a serial port, and never substitutes software on error.
 
+The checked-in Bell and echo examples use two and six distance-3 surface-code
+patches (34 and 102 physical qubits). They are fixed encoded experiments under
+an explicit storage/readout noise model with ideal gates and exact gate-boundary
+check results. Their logical diagrams come from tested generated mappings;
+this is not an arbitrary logical-to-QEC compiler. See the
+[example assumptions](qec/examples/README.md), including the ordinary-Bell/no-S
+adaptation and nonlocal transversal-CX coupling assumption.
+
 The accepted hardware design supports up to **128 detectors, 512 graph edges and
 32 observable bits at 100 MHz**. These are decoder capacities, not a physical-qubit
 limit. Compatible graph changes upload through the existing image without another

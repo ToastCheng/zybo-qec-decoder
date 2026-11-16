@@ -14,20 +14,71 @@
     </header>
     <main>
       <section
+        id="circuit-editor"
+        class="workflow-step"
+        aria-labelledby="circuit-title"
+      >
+        <h2 id="circuit-title">Circuit</h2>
+        <label class="template"
+          >Circuit
+          <select id="circuit-template">
+            <option value="surface_code:rotated_memory_z">
+              Surface memory · d3 Z · 3 rounds
+            </option>
+            <option value="custom">Custom Clifford circuit</option>
+          </select>
+        </label>
+        <p id="circuit-warning" class="failed" role="status" hidden></p>
+        <label
+          >Annotated Stim circuit<textarea
+            id="circuit-text"
+            rows="6"
+            spellcheck="false"
+          ></textarea>
+        </label>
+        <details id="advanced">
+          <summary>Advanced</summary>
+          <label
+            >Reference Stim (optional)<textarea
+              id="reference-text"
+              rows="4"
+              spellcheck="false"
+              placeholder="Leave blank for the circuit's noiseless reference"
+            ></textarea>
+          </label>
+          <label
+            >Logical circuit (optional, as supplied)<textarea
+              id="logical-text"
+              rows="3"
+              spellcheck="false"
+              placeholder="Optional Clifford gates, for example H 0. Mapping is not verified."
+            ></textarea>
+          </label>
+        </details>
+      </section>
+      <section
         id="configure"
         class="workflow-step"
         aria-labelledby="configure-title"
       >
-        <h2 id="configure-title">1 Configure</h2>
+        <h2 id="configure-title">1 Configure · seed and noise</h2>
+        <p id="noise-note">
+          Memory uses its four noise rates; other circuits retain the noise in
+          the Stim text and can add gate depolarization. Noise parameters and
+          injected faults are applied on Run.
+        </p>
         <div class="settings">
-          <label class="template"
-            >Circuit
-            <select id="circuit-template">
-              <option value="surface_code:rotated_memory_z">
-                Surface memory · d3 Z · 3 rounds
-              </option>
-              <option value="custom">Custom Clifford circuit</option>
-            </select>
+          <label
+            >Added gate depolarization
+            <input
+              id="added-noise"
+              type="number"
+              min="0"
+              max="0.75"
+              step="0.001"
+              value="0"
+              required
+            />
           </label>
           <label
             >Seed
@@ -84,21 +135,6 @@
               required
           /></label>
         </div>
-        <div class="toolbar">
-          <fieldset>
-            <legend>Inject</legend>
-            <button data-pauli="X" aria-pressed="true">X</button
-            ><button data-pauli="Y" aria-pressed="false">Y</button
-            ><button data-pauli="Z" aria-pressed="false">Z</button>
-          </fieldset>
-          <label
-            >Fault tick
-            <input id="fault-tick" type="number" min="0" max="21" value="0"
-          /></label>
-          <button id="example" disabled>Example fault</button>
-          <button id="reset" disabled>Clear faults</button>
-          <span id="scenario">Example · X on q10 at tick 8</span>
-        </div>
       </section>
       <section class="workflow-step run-step" aria-labelledby="run-title">
         <h2 id="run-title">2 Simulate + decode</h2>
@@ -144,6 +180,21 @@
           <div id="physical-scroll">
             <div id="lattice" aria-label="All physical qubits"></div>
           </div>
+          <div class="toolbar">
+            <fieldset>
+              <legend>Inject</legend>
+              <button data-pauli="X" aria-pressed="true">X</button
+              ><button data-pauli="Y" aria-pressed="false">Y</button
+              ><button data-pauli="Z" aria-pressed="false">Z</button>
+            </fieldset>
+            <label
+              >Fault tick
+              <input id="fault-tick" type="number" min="0" max="21" value="0"
+            /></label>
+            <button id="example" disabled>Example fault</button>
+            <button id="reset" disabled>Clear faults</button>
+            <ul id="scenario" aria-label="Injected faults"></ul>
+          </div>
           <div class="legend">
             <span class="gate-key">Active gate</span
             ><span class="error-key">Error</span
@@ -163,9 +214,14 @@
           </section>
 
           <div class="section-head">
-            <h2>Detectors</h2>
+            <h2>Measurement boundaries</h2>
             <span id="event-count">0</span>
           </div>
+          <p id="boundary-note">
+            r0: first check round (tick 7) · r1: second check round (tick 14) ·
+            r2: third check round (tick 21) · r3: final data readout (also tick
+            21).
+          </p>
           <div
             id="timeline"
             aria-label="Detector bits by measurement boundary"
@@ -174,55 +230,6 @@
         </section>
       </div>
 
-      <details id="circuit-editor">
-        <summary>Circuit</summary>
-        <p>
-          Edit annotated Stim, then select Custom Clifford circuit above and
-          press Run. Seed is shared with the configuration above. The four
-          surface-memory noise rates and lattice fault controls apply only to
-          Surface memory.
-        </p>
-        <label
-          >Annotated Stim circuit<textarea
-            id="circuit-text"
-            rows="9"
-            spellcheck="false"
-          >
-R 0
-X_ERROR(0.01) 0
-TICK
-M 0
-DETECTOR rec[-1]
-OBSERVABLE_INCLUDE(0) rec[-1]</textarea>
-        </label>
-        <label
-          >Reference Stim (optional)<textarea
-            id="reference-text"
-            rows="4"
-            spellcheck="false"
-            placeholder="Leave blank for the circuit's noiseless reference"
-          ></textarea>
-        </label>
-        <label
-          >Logical circuit (optional, as supplied)<textarea
-            id="logical-text"
-            rows="3"
-            spellcheck="false"
-            placeholder="Optional Clifford gates, for example H 0. Mapping is not verified."
-          ></textarea>
-        </label>
-        <label
-          >Added gate depolarization
-          <input
-            id="added-noise"
-            type="number"
-            min="0"
-            max="0.75"
-            step="0.001"
-            value="0"
-            required
-        /></label>
-      </details>
       <details id="evidence">
         <summary>Details</summary>
         <p>
