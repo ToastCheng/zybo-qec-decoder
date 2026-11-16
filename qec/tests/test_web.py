@@ -4,12 +4,14 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+
 from qec.surface.web import make_server
 
 
 @contextmanager
-def server(serial_port=None):
-    service = make_server(0, serial_port)
+def server(serial_port=None, public_origin=None):
+    service = make_server(0, serial_port, public_origin=public_origin)
     thread = threading.Thread(target=service.serve_forever)
     thread.start()
     try:
@@ -69,6 +71,67 @@ def test_canonical_routes_and_error_recovery():
         assert response["layout"]["kind"] == "circuit"
         assert response["layout"]["logical_circuit"] == "H 0"
         assert response["experiment"]["compiled"]["logical_mapping_verified"] is False
+
+
+def test_explicit_public_origin_serves_assets_and_runs():
+    origin = "https://qec.toastcheng.com"
+    with server(public_origin=origin) as port:
+        headers = {"Host": "qec.toastcheng.com", "Origin": origin}
+        for path in ["/", "/app.js", "/style.css", "/api/layout"]:
+            assert request(port, "GET", path, Host=headers["Host"])[0] == 200
+        status, raw = request(port, "GET", "/api/layout", **headers)
+        assert status == 200
+        settings = json.loads(raw)["run_defaults"]
+        status, raw = request(port, "POST", "/api/run", json.dumps(settings), **headers)
+        assert status == 200, raw
+        assert json.loads(raw)["experiment"]["compiled"]["counts"]["detectors"] == 24
+        assert request(port, "GET", "/")[0] == 200
+
+
+def test_public_origin_does_not_weaken_host_or_origin_checks():
+    origin = "https://qec.toastcheng.com"
+    with server() as port:
+        assert request(port, "GET", "/", Host="qec.toastcheng.com")[0] == 403
+    with server(public_origin=origin) as port:
+        for host, incoming_origin in [
+            ("evil.test", origin),
+            ("qec.toastcheng.com.evil.test", origin),
+            ("qec.toastcheng.com:443", origin),
+            ("qec.toastcheng.com", "https://evil.test"),
+            ("qec.toastcheng.com", "http://qec.toastcheng.com"),
+            ("qec.toastcheng.com", "null"),
+            (f"localhost:{port}", origin),
+        ]:
+            headers = {"Host": host, "Origin": incoming_origin}
+            assert request(port, "GET", "/app.js", **headers)[0] == 403
+            assert request(port, "POST", "/api/run", "{}", **headers)[0] == 403
+        assert request(
+            port, "GET", "/", Host="evil.test",
+            **{"X-Forwarded-Host": "qec.toastcheng.com", "X-Forwarded-Proto": "https"},
+        )[0] == 403
+        for duplicate in ["Host", "Origin"]:
+            connection = http.client.HTTPConnection("127.0.0.1", port)
+            connection.putrequest("GET", "/", skip_host=True)
+            connection.putheader("Host", "qec.toastcheng.com")
+            connection.putheader("Origin", origin)
+            connection.putheader(duplicate, "qec.toastcheng.com" if duplicate == "Host" else origin)
+            connection.endheaders()
+            response = connection.getresponse()
+            assert response.status == 403
+            response.read()
+            connection.close()
+
+
+@pytest.mark.parametrize("origin", [
+    "http://qec.toastcheng.com", "https://qec.toastcheng.com/",
+    "https://qec.toastcheng.com/path", "https://user@qec.toastcheng.com",
+    "https://qec.toastcheng.com?x=1", "https://qec.toastcheng.com#fragment",
+    "https://qec.toastcheng.com:bad", "https://qec.toastcheng.com:65536",
+    "https://qec.toastcheng.com\n", "https://", "null",
+])
+def test_invalid_public_origins_are_rejected(origin):
+    with pytest.raises(ValueError):
+        make_server(0, public_origin=origin)
 
 
 def test_layout_and_invalid_runs_never_open_serial():

@@ -105,6 +105,19 @@ The server binds only to loopback. Opening the page does not query, program or
 reset the board. No frontend build is needed. Stop it with Ctrl+C before using
 the UART with another client.
 
+For a public Cloudflare Tunnel at `https://qec.toastcheng.com`, launch with:
+
+```sh
+python -m qec.surface.web --port 8765 --serial-port "$PORT" --public-origin https://qec.toastcheng.com
+```
+
+Point the tunnel at `http://localhost:8765` and preserve the incoming Host header.
+The option permits only that exact HTTPS origin in addition to localhost; other
+hosts and cross-origin requests remain rejected. The server still binds to
+loopback. Without this option it accepts only local access. This is not
+authentication: public visitors can run simulations and submit experiments to the
+connected FPGA. Only one experiment runs at a time.
+
 ### 4. Define the circuit, noise and seed
 
 Choose **Surface memory**, **Encoded Bell**, or **Encoded echo** from the circuit

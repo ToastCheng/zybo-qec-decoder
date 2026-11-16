@@ -1,15 +1,34 @@
-"""Serve the circuit editor and experiment routes on loopback."""
+"""Serve the circuit editor on loopback, optionally behind a public HTTPS proxy."""
 
 import argparse
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from qec.surface.engine import EditorLab
 
 
-def make_server(port=8765, serial_port=None):
+def make_server(port=8765, serial_port=None, public_origin=None):
+    public_host = None
+    if public_origin is not None:
+        parsed = urlsplit(public_origin)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or public_origin != "https://" + parsed.netloc
+            or any(character.isspace() for character in public_origin)
+        ):
+            raise ValueError("--public-origin must be an HTTPS origin without a path")
+        # Accessing port also rejects malformed or out-of-range port numbers.
+        _ = parsed.port
+        public_host = parsed.netloc
     lab = EditorLab(serial_port)
     busy = threading.Lock()
     assets = Path(__file__).with_name("web_assets")
@@ -34,11 +53,20 @@ def make_server(port=8765, serial_port=None):
             self.wfile.write(body)
 
         def trusted(self):
-            """Check Host even without Origin to block DNS rebinding."""
+            """Allow only configured authorities and their matching origins.
+
+            Do not trust forwarded headers: the tunnel preserves the public Host.
+            Host validation also applies when a navigation has no Origin header.
+            """
             allowed = {
-                f"127.0.0.1:{self.server.server_port}",
-                f"localhost:{self.server.server_port}",
+                host: "http://" + host
+                for host in (
+                    f"127.0.0.1:{self.server.server_port}",
+                    f"localhost:{self.server.server_port}",
+                )
             }
+            if public_host is not None and public_origin is not None:
+                allowed[public_host] = public_origin
             hosts = self.headers.get_all("Host", [])
             origins = self.headers.get_all("Origin", [])
             if (
@@ -46,10 +74,10 @@ def make_server(port=8765, serial_port=None):
                 or hosts[0] not in allowed
                 or len(origins) > 1
                 or origins
-                and origins[0] != "http://" + hosts[0]
+                and origins[0] != allowed[hosts[0]]
             ):
                 self.close_connection = True
-                self.reply(403, {"error": "Loopback Host and same Origin required"})
+                self.reply(403, {"error": "Allowed Host and same Origin required"})
                 return False
             return True
 
@@ -117,10 +145,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--serial-port", help="FPGA UART, 115200 baud")
+    parser.add_argument(
+        "--public-origin",
+        help="Exact HTTPS origin allowed through a reverse proxy (enables public runs)",
+    )
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("--port must be 1..65535")
-    server = make_server(args.port, args.serial_port)
+    try:
+        server = make_server(args.port, args.serial_port, args.public_origin)
+    except ValueError as exc:
+        parser.error(str(exc))
     print(
         f"Circuit editor: http://127.0.0.1:{server.server_port} ({'FPGA' if args.serial_port else 'Software'})",
         flush=True,
