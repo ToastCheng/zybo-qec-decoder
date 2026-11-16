@@ -25,6 +25,116 @@ def _hardware(experiment):
     }
 
 
+def _checks(circuit):
+    """Read reusable extraction ancillas and their actual data-CX neighbors.
+
+    Call only for a recognized encoded experiment or generated memory. Coordinates
+    alone are not evidence that an arbitrary physical circuit is a surface code.
+    """
+    operations = list(circuit.flattened())
+    ancillas = {
+        t.qubit_value
+        for op in operations
+        if op.name == "MR"
+        for t in op.targets_copy()
+        if t.is_qubit_target
+    }
+    reset = {
+        t.qubit_value
+        for op in operations
+        if op.name == "R"
+        for t in op.targets_copy()
+        if t.is_qubit_target
+    }
+    ancillas &= reset
+    supports = {q: set() for q in ancillas}
+    xs = set()
+    for op in operations:
+        if op.name == "MR":
+            break
+        if op.name == "H":
+            xs.update(t.qubit_value for t in op.targets_copy())
+    for op in operations:
+        if op.name != "CX":
+            continue
+        targets = op.targets_copy()
+        for a, b in zip(targets[::2], targets[1::2]):
+            if not (a.is_qubit_target and b.is_qubit_target):
+                continue
+            a, b = a.qubit_value, b.qubit_value
+            if (a in ancillas) != (b in ancillas):
+                ancilla, data = (a, b) if a in ancillas else (b, a)
+                supports[ancilla].add(data)
+    coords = circuit.get_final_qubit_coordinates()
+    return [
+        {
+            "id": q,
+            "coords": coords.get(q, []),
+            "basis": "X" if q in xs else "Z",
+            "support": sorted(supports[q]),
+        }
+        for q in sorted(ancillas)
+    ]
+
+
+def _detector_grid(layout):
+    """Keep measurement-boundary columns independent from physical gate ticks."""
+    checks = {
+        tuple(q["coords"][:2]): q for q in layout["checks"] if len(q["coords"]) >= 2
+    }
+    rows = {
+        str(q["id"]): {"id": str(q["id"]), "label": f"{q['basis']}{q['id']}"}
+        for q in layout["checks"]
+    }
+    boundaries = {}
+    for detector in layout["detectors"]:
+        coords = detector["coords"]
+        check = checks.get(tuple(coords[:2])) if len(coords) >= 2 else None
+        if check is not None:
+            row_id = str(check["id"])
+            label = f"{check['basis']}{check['id']}"
+        elif coords:
+            spatial = coords[:2]
+            row_id = "coords:" + ",".join(format(c, "g") for c in spatial)
+            label = "(" + ", ".join(format(c, "g") for c in spatial) + ")"
+        else:
+            row_id = label = f"D{detector['id']}"
+        rows.setdefault(row_id, {"id": row_id, "label": label})
+        detector["row"] = row_id
+        # Detector coordinate time is authoritative; tick fallback only when
+        # no temporal coordinate exists. Final data and ancilla readouts may
+        # share a tick, so using tick alone would merge distinct boundaries.
+        key = (
+            ("time", *coords[2:])
+            if len(coords) >= 3
+            else ("tick", detector["available_tick"])
+        )
+        if key not in boundaries:
+            index = len(boundaries)
+            boundaries[key] = {
+                "id": index,
+                "label": f"r{index}",
+                "available_tick": detector["available_tick"],
+            }
+        boundary = boundaries[key]
+        boundary["available_tick"] = max(
+            boundary["available_tick"], detector["available_tick"]
+        )
+        detector["boundary"] = boundary["id"]
+    layout.update(rows=list(rows.values()), boundaries=list(boundaries.values()))
+    return layout
+
+
+def _memory_layout(model):
+    layout = model.layout()
+    layout.update(
+        checks=_checks(model.clean),
+        mapping_verified=True,
+        mapping="Known encoded Z-memory experiment",
+    )
+    return _detector_grid(layout)
+
+
 def _layout(circuit, source, logical=None):
     ticks = [{"id": 0, "operations": []}]
     used = set()
@@ -41,20 +151,65 @@ def _layout(circuit, source, logical=None):
             )
         ]
         used.update(targets)
-        ticks[-1]["operations"].append({"name": op.name, "targets": targets})
+        typed_targets = []
+        for target in op.targets_copy():
+            if target.is_combiner:
+                typed_targets.append({"type": "combiner"})
+                continue
+            kind = "qubit"
+            if target.is_measurement_record_target:
+                kind = "rec"
+            elif target.is_sweep_bit_target:
+                kind = "sweep"
+            elif target.is_x_target:
+                kind = "X"
+            elif target.is_y_target:
+                kind = "Y"
+            elif target.is_z_target:
+                kind = "Z"
+            detail = {"type": kind, "value": target.value}
+            if target.is_inverted_result_target:
+                detail["inverted"] = True
+            typed_targets.append(detail)
+        ticks[-1]["operations"].append(
+            {
+                "name": op.name,
+                "targets": targets,
+                "typed_targets": typed_targets,
+                "args": op.gate_args_copy(),
+            }
+        )
         if op.name == "DETECTOR":
             detectors.append({"id": len(detectors), "available_tick": len(ticks) - 1})
     coords = circuit.get_final_qubit_coordinates()
     detector_coords = circuit.get_detector_coordinates()
     for detector in detectors:
         detector["coords"] = detector_coords.get(detector["id"], [])
-    return {
+    from qec.surface.encoded import examples
+
+    matched = None
+    if logical:
+        physical = circuit.without_noise()
+        logical_circuit = stim.Circuit(logical)
+        for entry in examples():
+            if physical == stim.Circuit(
+                entry["circuit"]
+            ).without_noise() and logical_circuit == stim.Circuit(
+                entry["logical_circuit"]
+            ):
+                matched = entry
+                break
+    checks = _checks(circuit) if matched else []
+    check_ids = {check["id"] for check in checks}
+    layout = {
         "kind": "circuit",
         "source": source,
         "protocol": "graph-v2",
         "ticks": ticks,
-        "data": [{"id": q, "coords": coords.get(q, [])} for q in sorted(used)],
-        "checks": [],
+        "data": [
+            {"id": q, "coords": coords.get(q, [])} for q in sorted(used - check_ids)
+        ],
+        "checks": checks,
         "detectors": detectors,
         "code": "Annotated physical Clifford circuit",
         "circuit": str(circuit),
@@ -62,6 +217,16 @@ def _layout(circuit, source, logical=None):
         "mapping_verified": False,
         "mapping": "No logical-to-physical mapping supplied",
     }
+    if matched:
+        layout.update(
+            mapping_verified=True,
+            encoded_example=matched["id"],
+            mapping=matched["label"],
+            code=matched["label"],
+            noise_model=matched.get("noise_model"),
+            semantic_adaptation=matched.get("semantic_adaptation"),
+        )
+    return _detector_grid(layout)
 
 
 class EditorLab:
@@ -74,11 +239,21 @@ class EditorLab:
         from qec.surface.encoded import examples
 
         model = Lab()
-        layout = model.layout()
+        layout = _memory_layout(model)
         layout.update(
             circuit=str(model.clean),
             reference_circuit=model.reference,
-            examples=examples(),
+            examples=[
+                dict(
+                    entry,
+                    layout=_layout(
+                        stim.Circuit(entry["circuit"]),
+                        "FPGA" if self.serial_port else "Software",
+                        entry["logical_circuit"],
+                    ),
+                )
+                for entry in examples()
+            ],
             protocol="graph-v2",
             source="FPGA" if self.serial_port else "Software",
             serial_configured=bool(self.serial_port),
@@ -134,7 +309,7 @@ class EditorLab:
             observable_truth=result["observable"],
             prediction=result["prediction"],
         )
-        layout = model.layout()
+        layout = _memory_layout(model)
         layout.update(
             protocol="graph-v2",
             kind="memory",
@@ -150,30 +325,12 @@ class EditorLab:
         return result
 
     def circuit_run(self, settings):
-        from qec.surface.encoded import examples
-
         experiment = CircuitExperiment(self.serial_port).run(settings)
         layout = _layout(
             stim.Circuit(experiment["compiled"]["circuit"]),
             experiment["source"],
             experiment["compiled"].get("logical_circuit"),
         )
-        if settings.get("logical_circuit"):
-            physical = stim.Circuit(settings["circuit"]).without_noise()
-            logical = stim.Circuit(settings["logical_circuit"])
-            for entry in examples():
-                if physical == stim.Circuit(
-                    entry["circuit"]
-                ).without_noise() and logical == stim.Circuit(entry["logical_circuit"]):
-                    layout.update(
-                        mapping_verified=True,
-                        encoded_example=entry["id"],
-                        mapping=entry["label"],
-                        code=entry["label"],
-                        noise_model=entry.get("noise_model"),
-                        semantic_adaptation=entry.get("semantic_adaptation"),
-                    )
-                    break
         trace = [
             {
                 "tick": t["tick"],

@@ -43,6 +43,8 @@ test("rejects stale server layouts with an actionable restart error", () => {
     data: [],
     checks: [],
     detectors: [],
+    boundaries: [],
+    rows: [],
   };
   assert.equal(validateLayout(layout), layout);
 });

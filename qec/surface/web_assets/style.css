@@ -153,7 +153,12 @@ h2 {
   aspect-ratio: 1;
   max-width: 470px;
   margin: auto;
-  background: #e9eee8;
+  background-color: #f1f3ed;
+  background-image:
+    linear-gradient(to right, #cbd4ca 1px, transparent 1px),
+    linear-gradient(to bottom, #cbd4ca 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-position: 40px 40px;
   isolation: isolate;
 }
 #lattice svg {
@@ -199,6 +204,26 @@ h2 {
   color: var(--dark);
   border-radius: 4px;
   cursor: default;
+}
+.stabilizer-face {
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.stabilizer-face.basis-X {
+  fill: #d5e5f5;
+  stroke: #81a8cb;
+}
+.stabilizer-face.basis-Z {
+  fill: #e8daf0;
+  stroke: #b393c6;
+}
+.check-qubit.basis-X,
+.x-key:before {
+  background: #d5e5f5;
+}
+.check-qubit.basis-Z,
+.z-key:before {
+  background: #e8daf0;
 }
 .qubit.active {
   background: #adddf6;
@@ -274,11 +299,38 @@ h2 {
 .fix-key:before {
   background: var(--mint);
 }
+#timeline-scroll {
+  max-height: 470px;
+  overflow: auto;
+  margin: 0 12px 12px;
+}
 #timeline {
   display: grid;
-  grid-template-columns: 44px repeat(4, minmax(0, 1fr));
+  grid-template-columns: max-content repeat(4, minmax(48px, 1fr));
   gap: 5px;
-  margin: 0 18px 16px;
+  margin: 0;
+  min-width: max-content;
+}
+.detector-cell {
+  display: grid;
+  gap: 3px;
+}
+.matrix-corner {
+  font: 10px var(--mono);
+  align-self: center;
+}
+.check-row {
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  padding: 0 6px;
+  z-index: 1;
+}
+.time-header {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 2;
 }
 .time-header {
   text-align: center;

@@ -40,6 +40,8 @@ function validateLayout(data) {
     !data.ticks.every((t) => Array.isArray(t.operations)) ||
     !Array.isArray(data.data) ||
     !Array.isArray(data.checks) ||
+    !Array.isArray(data.boundaries) ||
+    !Array.isArray(data.rows) ||
     !Array.isArray(data.detectors) ||
     !data.detectors.every((d) => Number.isInteger(d.available_tick))
   ) {
@@ -316,8 +318,77 @@ function suppliedDiagram(text) {
     ticks,
   };
 }
+function stabilizerFaces(checks, points) {
+  const byId = new Map(points.map((q) => [q.id, q]));
+  return checks
+    .map((check) => {
+      const support = (check.support || [])
+        .map((id) => byId.get(id))
+        .filter(Boolean);
+      if (support.length < 2) return "";
+      // Boundary checks form triangles with their ancilla; bulk checks use four data sites.
+      const vertices =
+        support.length === 2 ? [...support, byId.get(check.id)] : support;
+      if (vertices.some((q) => !q)) return "";
+      const cx = vertices.reduce((sum, q) => sum + q.x, 0) / vertices.length;
+      const cy = vertices.reduce((sum, q) => sum + q.y, 0) / vertices.length;
+      vertices.sort(
+        (a, b) =>
+          Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx),
+      );
+      return `<polygon class="stabilizer-face basis-${check.basis}" data-check="${check.id}" points="${vertices.map((q) => `${q.x},${q.y}`).join(" ")}"/>`;
+    })
+    .join("");
+}
+function decoderMatrix(layout, result, tick, corrected = false) {
+  const boundaries = layout.boundaries || [];
+  const rows = layout.rows || [];
+  const cells = new Map();
+  for (const d of layout.detectors) {
+    const key = `${d.row}:${d.boundary}`;
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push(d);
+  }
+  let html =
+    '<span class="matrix-corner">Check</span>' +
+    boundaries
+      .map(
+        (b) =>
+          `<span class="time-header" title="Tick ${b.available_tick}">${escapeMarkup(b.label)}</span>`,
+      )
+      .join("");
+  for (const row of rows) {
+    html += `<span class="check-row">${escapeMarkup(row.label)}</span>`;
+    for (const boundary of boundaries) {
+      const detectors = cells.get(`${row.id}:${boundary.id}`) || [];
+      if (!detectors.length) {
+        html += '<span class="no-detector">—</span>';
+        continue;
+      }
+      html +=
+        '<div class="detector-cell">' +
+        detectors
+          .map((d) => {
+            const available = Boolean(result && d.available_tick <= tick);
+            const bit = available
+              ? Number(result.detector_indices.includes(d.id))
+              : null;
+            const residual =
+              corrected && result?.residual_syndrome != null
+                ? maskBit(result.residual_syndrome, d.id)
+                : null;
+            return `<div data-detector="${d.id}" data-available="${available}" class="detector ${bit ? "fired" : ""} ${bit && residual === 0 ? "cleared" : ""}" title="D${d.id} · tick ${d.available_tick}"><small>D${d.id}</small><b>${bit === null ? "·" : bit && residual !== null ? `${bit}→${residual}` : bit}</b></div>`;
+          })
+          .join("") +
+        "</div>";
+    }
+  }
+  return html;
+}
 if (typeof module !== "undefined")
   module.exports = {
+    decoderMatrix,
+    stabilizerFaces,
     cycleSummary,
     circuitSettings,
     maskBit,
@@ -461,53 +532,49 @@ if (typeof document !== "undefined") {
       state.seek(0);
     } catch (e) {
       if (id !== requestId) return;
-      failure = `${e.message} Check settings and the server/FPGA connection, then press Run to retry.`;
+      failure = e.message;
     } finally {
       inFlight = false;
       pending = false;
       render();
     }
   }
-  const position = (q) => ({
-    x: (q.coords[0] + 0.6) * 100,
-    y: (q.coords[1] + 0.6) * 100,
-  });
+
   const combine = (a, b) =>
     !a ? b || "" : !b ? a : a === b ? "" : "XYZ".replace(a, "").replace(b, "");
   let diagramKey = "";
   function renderDiagram(custom, tick) {
-    const logicalText = custom ? $("logical-text").value.trim() : "";
-    const verified = Boolean(result && layout.mapping_verified);
+    const logicalText = custom
+      ? $("logical-text").value.trim()
+      : layout.logical_circuit;
+    const verified =
+      !custom ||
+      Boolean(
+        layout.mapping_verified && logicalText === layout.logical_circuit,
+      );
     const key = JSON.stringify([
       layout,
       Boolean(experiment),
       logicalText,
       verified,
     ]);
+    $("diagram-title").textContent = logicalText
+      ? "Logical circuit"
+      : "Physical circuit";
+    $("diagram-note").hidden = true;
+    $("circuit-view").dataset.mapping = logicalText
+      ? verified
+        ? "verified"
+        : "unverified"
+      : "physical";
+    $("diagram-title").title =
+      logicalText && !verified
+        ? "Supplied logical circuit; mapping unverified"
+        : "";
     if (key !== diagramKey) {
       diagramKey = key;
-      if (!custom) {
-        $("diagram-title").textContent = "Logical memory";
-        $("diagram-note").textContent =
-          "Known surface-memory experiment · one encoded Z-memory wire. Logical and physical ticks are not a gate mapping.";
-        $("circuit-diagram").innerHTML = circuitDiagram(
-          [{ id: 0 }],
-          [
-            { id: 0, operations: [{ name: "R", targets: [0] }] },
-            { id: 1, operations: [{ name: "Memory Z", targets: [0] }] },
-            { id: 2, operations: [{ name: "M", targets: [0] }] },
-          ],
-          -1,
-          true,
-        );
-      } else if (logicalText) {
-        $("diagram-title").textContent = verified
-          ? "Known encoded example"
-          : "Logical circuit · as supplied";
-        $("diagram-note").textContent = verified
-          ? "Known encoded example · physical and logical inputs match the supplied encoding. Logical gate positions are not physical replay ticks."
-          : "Logical circuit as supplied · mapping not verified. Logical gate positions are not physical replay ticks.";
-        try {
+      try {
+        if (logicalText) {
           const supplied = suppliedDiagram(logicalText);
           $("circuit-diagram").innerHTML = circuitDiagram(
             supplied.qubits,
@@ -515,30 +582,26 @@ if (typeof document !== "undefined") {
             -1,
             true,
           );
-        } catch (error) {
-          $("diagram-note").textContent +=
-            ` ${error.message} Supplied text is shown below.`;
-          const pre = document.createElement("pre");
-          pre.textContent = logicalText;
-          $("circuit-diagram").replaceChildren(pre);
+        } else {
+          const ticks =
+            experiment?.trace?.map((t) => ({
+              id: t.tick,
+              operations: t.diagram,
+            })) || layout.ticks;
+          $("circuit-diagram").innerHTML = circuitDiagram(
+            [...layout.data, ...layout.checks],
+            ticks,
+            tick,
+          );
         }
-      } else {
-        $("diagram-title").textContent = "Input circuit";
-        $("diagram-note").textContent =
-          "No logical-to-physical mapping supplied. These wires are the annotated physical input.";
-        const ticks =
-          experiment?.trace?.map((t) => ({
-            id: t.tick,
-            operations: t.diagram,
-          })) || layout.ticks;
-        $("circuit-diagram").innerHTML = circuitDiagram(
-          layout.data,
-          ticks,
-          tick,
-        );
+      } catch (error) {
+        const pre = document.createElement("pre");
+        pre.textContent = logicalText;
+        $("circuit-diagram").replaceChildren(pre);
+        $("diagram-title").title = error.message;
       }
     }
-    if (custom && !logicalText) {
+    if (!logicalText) {
       document
         .querySelectorAll("#circuit-diagram .gate")
         .forEach((g) =>
@@ -559,7 +622,15 @@ if (typeof document !== "undefined") {
     const focused = document.activeElement?.dataset.qubit;
     const corrected = state.tick > state.lastTick;
     const tick = Math.min(state.tick, state.lastTick);
-    const operations = layout.ticks[tick].operations;
+    const operations = layout.ticks[tick].operations.filter(
+      (op) =>
+        ![
+          "QUBIT_COORDS",
+          "SHIFT_COORDS",
+          "DETECTOR",
+          "OBSERVABLE_INCLUDE",
+        ].includes(op.name),
+    );
     const visible = result
       ? visibleDetectors(layout.detectors, result.detector_indices, tick)
       : [];
@@ -570,7 +641,7 @@ if (typeof document !== "undefined") {
       : `Tick ${tick}`;
     $("operations").textContent = corrected
       ? "Pauli frame"
-      : operations.map((op) => op.name).join(" · ");
+      : [...new Set(operations.map((op) => op.name))].join(" · ");
     $("position").textContent = `${state.tick} / ${state.endTick}`;
     $("scrubber").value = state.tick;
     $("scrubber").disabled = !result || pending;
@@ -579,16 +650,7 @@ if (typeof document !== "undefined") {
     $("play").disabled = pending || !result;
     const example = selectedExample();
     const unsupported = example?.decoder_compatible === false;
-    $("circuit-warning").hidden = !example;
-    $("circuit-warning").className = unsupported ? "failed" : "";
-    $("circuit-warning").textContent = example
-      ? [
-          example.semantic_adaptation,
-          example.noise_model || example.decoder_limitation,
-        ]
-          .filter(Boolean)
-          .join(" ")
-      : "";
+
     $("run").disabled = pending || inFlight || unsupported;
     $("run").textContent = pending ? "Running…" : "Run";
     document
@@ -611,61 +673,51 @@ if (typeof document !== "undefined") {
     $("status").className = failure ? "failed" : "";
     $("status").textContent =
       failure ||
-      (unsupported
-        ? "Selected encoded circuit is not supported by the graph-only decoder. See the circuit limitation above."
-        : "") ||
-      (pending
-        ? "Simulating + decoding…"
-        : result
-          ? "Ready to replay · no new decoder requests"
-          : "Run to update · configure settings or select faults, then press Run");
+      (unsupported ? "Unsupported circuit" : "") ||
+      (pending ? "Simulating + decoding…" : result ? "Ready" : "");
     const custom = layout.kind === "circuit";
     const selectedCustom =
       $("circuit-template").value !== "surface_code:rotated_memory_z";
-    const grid = custom ? physicalGrid(layout.data) : null;
-    const pointById = new Map(grid?.points.map((q) => [q.id, q]) || []);
-    $("lattice").classList.toggle("index-lattice", custom);
-    $("lattice").style.width = custom ? `${grid.width}px` : "";
-    $("lattice").style.height = custom ? `${grid.height}px` : "";
-    $("grid-note").textContent = custom
-      ? `${layout.data.length} used physical qubits · ${grid.label}`
-      : "Surface-memory physical qubits · QUBIT_COORDS geometry";
+    const grid = physicalGrid([...layout.data, ...layout.checks]);
+    const pointById = new Map(grid.points.map((q) => [q.id, q]));
+    $("lattice").classList.add("index-lattice");
+    $("lattice").style.width = `${grid.width}px`;
+    $("lattice").style.height = `${grid.height}px`;
+    $("grid-note").textContent = `${grid.points.length} physical qubits`;
+    $("grid-note").title = grid.label;
     const active = new Set(operations.flatMap((op) => op.targets));
-    const byId = new Map(
-      [...layout.data, ...layout.checks].map((q) => [q.id, q]),
-    );
-    const links = (custom ? [] : operations)
+
+    const links = operations
       .filter((op) => op.name === "CX")
       .flatMap((op) => {
         const links = [];
         for (let i = 0; i < op.targets.length; i += 2) {
-          const a = position(byId.get(op.targets[i])),
-            b = position(byId.get(op.targets[i + 1]));
+          const a = pointById.get(op.targets[i]),
+            b = pointById.get(op.targets[i + 1]);
+          if (!a || !b) continue;
           links.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`);
         }
         return links;
       });
     $("lattice").innerHTML =
-      `<svg viewBox="0 0 720 720" aria-hidden="true">${corrected ? "" : links.join("")}</svg>`;
+      `<svg viewBox="0 0 ${grid.width} ${grid.height}" aria-hidden="true">${stabilizerFaces(layout.checks, grid.points)}${corrected ? "" : links.join("")}</svg>`;
     for (const q of layoutCurrent ? [...layout.data, ...layout.checks] : []) {
       const data = !q.basis;
       const button = document.createElement("button");
       const fault = frame[q.id] || "",
         fix = fixes[q.id] || "";
       const residual = combine(fault, fix);
-      const fired =
-        !custom &&
-        layout.detectors.some(
-          (d) =>
-            d.coords?.[0] === q.coords?.[0] &&
-            d.coords?.[1] === q.coords?.[1] &&
-            visible.includes(d.id),
-        );
-      button.className = `qubit ${data ? "data-qubit" : "check-qubit"} ${!corrected && active.has(q.id) ? "active" : ""} ${fault ? "has-error" : ""} ${fired ? "check-fired" : ""} ${fix ? "has-fix" : ""} ${corrected && residual ? "residual" : ""}`;
+      const fired = layout.detectors.some(
+        (d) =>
+          d.coords?.[0] === q.coords?.[0] &&
+          d.coords?.[1] === q.coords?.[1] &&
+          visible.includes(d.id),
+      );
+      button.className = `qubit ${data ? "data-qubit" : `check-qubit basis-${q.basis}`} ${!corrected && active.has(q.id) ? "active" : ""} ${fault ? "has-error" : ""} ${fired ? "check-fired" : ""} ${fix ? "has-fix" : ""} ${corrected && residual ? "residual" : ""}`;
       button.dataset.qubit = q.id;
-      const pos = custom ? pointById.get(q.id) : position(q);
-      button.style.left = custom ? `${pos.x}px` : `${pos.x / 7.2}%`;
-      button.style.top = custom ? `${pos.y}px` : `${pos.y / 7.2}%`;
+      const pos = pointById.get(q.id);
+      button.style.left = `${pos.x}px`;
+      button.style.top = `${pos.y}px`;
       button.setAttribute(
         "aria-label",
         data
@@ -709,44 +761,9 @@ if (typeof document !== "undefined") {
       document
         .querySelector(`[data-qubit="${focused}"]`)
         ?.focus({ preventScroll: true });
-    let html =
-      "<span></span>" +
-      [0, 1, 2, 3]
-        .map((t) => `<span class="time-header">r${t}</span>`)
-        .join("");
-    for (const check of layout.checks) {
-      html += `<span class="check-row">${check.basis}${check.id}</span>`;
-      for (let t = 0; t < 4; t++) {
-        const d = layout.detectors.find(
-          (d) =>
-            d.coords[0] === check.coords[0] &&
-            d.coords[1] === check.coords[1] &&
-            d.coords[2] === t,
-        );
-        if (!d) {
-          html += '<span class="no-detector">—</span>';
-          continue;
-        }
-        const available = result && d.available_tick <= tick;
-        const bit = available ? Number(visible.includes(d.id)) : null;
-        const replay =
-          corrected && result?.residual_syndrome !== null
-            ? maskBit(result.residual_syndrome, d.id)
-            : null;
-        html += `<div data-detector="${d.id}" data-available="${Boolean(available)}" class="detector ${bit ? "fired" : ""} ${bit && replay === 0 ? "cleared" : ""}" title="D${d.id} · tick ${d.available_tick}"><small>D${d.id}</small><b>${bit === null ? "·" : bit && replay !== null ? `${bit}→${replay}` : bit}</b></div>`;
-      }
-    }
-    if (custom) {
-      html = layout.detectors
-        .map((d) => {
-          const available = Boolean(result && d.available_tick <= tick);
-          const bit = available ? Number(visible.includes(d.id)) : null;
-          return `<div data-detector="${d.id}" data-available="${available}" class="detector ${bit ? "fired" : ""}"><small>D${d.id} · t${d.available_tick}</small><b>${bit ?? "·"}</b></div>`;
-        })
-        .join("");
-    }
-    $("timeline").classList.toggle("generic-detectors", custom);
-    $("timeline").innerHTML = html;
+    $("timeline").style.gridTemplateColumns =
+      `max-content repeat(${layout.boundaries?.length || 1}, minmax(48px, 1fr))`;
+    $("timeline").innerHTML = decoderMatrix(layout, result, tick, corrected);
     $("event-count").textContent = `${visible.length} flips`;
     $("result").textContent =
       custom && result
@@ -761,13 +778,12 @@ if (typeof document !== "undefined") {
           : "failed"
         : "";
     $("physical-scroll").hidden = !layoutCurrent;
-    $("boundary-note").hidden = custom || !layoutCurrent;
+    $("boundary-note").hidden = true;
     $("timeline").hidden = !layoutCurrent;
     $("operations").hidden = !layoutCurrent;
     if (!layoutCurrent) {
-      $("grid-note").textContent =
-        "Run to compile the selected circuit's physical layout, then click a qubit to inject.";
-      $("tick-label").textContent = "Physical layout pending Run";
+      $("grid-note").textContent = "";
+      $("tick-label").textContent = "Physical layout";
     }
     document
       .querySelectorAll(".toolbar button, .toolbar input")
@@ -783,7 +799,7 @@ if (typeof document !== "undefined") {
     }
     if (!state.faults.length) {
       const item = document.createElement("li");
-      item.textContent = "No faults · click a physical qubit to inject";
+      item.textContent = "No faults";
       $("scenario").append(item);
     }
     $("technical").textContent = result
@@ -844,8 +860,8 @@ if (typeof document !== "undefined") {
       $("reference-text").value = "";
       $("logical-text").value = "";
     }
-    layout = memoryLayout;
-    layoutCurrent = memory;
+    layout = memory ? memoryLayout : example?.layout || memoryLayout;
+    layoutCurrent = memory || Boolean(example?.layout);
     state = new LabState(layout.ticks.length - 1, memory);
     $("fault-tick").value = 0;
     $("scrubber").max = state.endTick;

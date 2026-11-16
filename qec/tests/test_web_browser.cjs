@@ -259,7 +259,7 @@ test(
     assert.equal(await js('document.getElementById("play").disabled'), true);
     assert.match(
       await js('document.getElementById("status").textContent'),
-      /Run to update/,
+      /^$/,
     );
     assert.equal(
       await js('document.getElementById("technical").textContent'),
@@ -344,7 +344,7 @@ test(
     );
     assert.match(
       await js('document.getElementById("status").textContent'),
-      /Run to update/,
+      /^$/,
     );
     await until(
       '!document.getElementById("run").disabled',
@@ -371,7 +371,9 @@ test(
         false,
         `no overflow at ${width}`,
       );
-      await js('document.getElementById("play").scrollIntoView({behavior:"instant",block:"center"})');
+      await js(
+        'document.getElementById("play").scrollIntoView({behavior:"instant",block:"center"})',
+      );
       assert.ok(
         await js(
           'document.getElementById("play").getBoundingClientRect().bottom < innerHeight',

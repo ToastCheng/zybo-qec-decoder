@@ -22,7 +22,8 @@ test("circuit dropdown and visible Stim editor share a section separate from par
   assert.ok(
     html.indexOf('class="toolbar"') > html.indexOf('id="physical-scroll"'),
   );
-  assert.match(html, /Measurement boundaries/);
+  assert.match(html, />Decoder bit<\/h2>/);
+  assert.doesNotMatch(html, /circuit-warning|Measurement boundaries/);
   for (const id of ["circuit-text", "reference-text", "added-noise"])
     assert.ok(html.includes(`id="${id}"`));
   assert.match(html, /value="custom">Custom Clifford circuit/);

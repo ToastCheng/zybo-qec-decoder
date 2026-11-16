@@ -20,6 +20,7 @@ help:
 
 test:
 	cd "$(ROOT)" && $(PYTHON) -m pytest qec/tests scripts/test_source_docs.py -q
+	cd "$(ROOT)" && node --test qec/tests/*.cjs
 
 sim:
 	cd "$(ROOT)" && $(PYTHON) scripts/simulate.py --bench core --build-dir "$(ROOT)/build/sim/core"

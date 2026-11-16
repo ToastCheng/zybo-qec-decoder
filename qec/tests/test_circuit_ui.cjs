@@ -115,16 +115,51 @@ test(
       "initial lattice",
     );
     assert.equal(posts.length, 0);
-    assert.equal(await js('document.querySelector(".toolbar").previousElementSibling.id'), "physical-scroll");
-    assert.equal(await js('document.querySelector("#scenario").tagName'), "UL");
-    assert.equal(await js('document.querySelector("#circuit-text").closest("details")'), null);
-    assert.equal(await js('document.querySelector("#circuit-template").closest("section").id'), "circuit-editor");
-    assert.equal(await js('document.querySelector("#seed").closest("section").id'), "configure");
-    assert.match((await js('document.querySelector("#boundary-note").textContent')).replace(/\s+/g, " "), /r0: first.*tick 7.*r1: second.*tick 14.*r2: third.*tick 21.*r3: final.*also tick 21/);
     assert.equal(
-      await js('document.querySelector("#advanced").open'),
-      false,
+      await js('document.querySelector(".toolbar").previousElementSibling.id'),
+      "physical-scroll",
     );
+    assert.equal(await js('document.querySelector("#scenario").tagName'), "UL");
+    assert.equal(
+      await js('document.querySelector("#circuit-text").closest("details")'),
+      null,
+    );
+    assert.equal(
+      await js(
+        'document.querySelector("#circuit-template").closest("section").id',
+      ),
+      "circuit-editor",
+    );
+    assert.equal(
+      await js('document.querySelector("#seed").closest("section").id'),
+      "configure",
+    );
+    assert.deepEqual(
+      await js(
+        '[...document.querySelectorAll("#timeline .time-header")].map(e=>e.textContent)',
+      ),
+      ["r0", "r1", "r2", "r3"],
+    );
+    assert.equal(await js('document.querySelector("#circuit-warning")'), null);
+    assert.equal(
+      await js('document.querySelectorAll(".stabilizer-face").length'),
+      8,
+    );
+    assert.notEqual(
+      await js(
+        'getComputedStyle(document.querySelector(".stabilizer-face.basis-X")).fill',
+      ),
+      await js(
+        'getComputedStyle(document.querySelector(".stabilizer-face.basis-Z")).fill',
+      ),
+    );
+    assert.notEqual(
+      await js(
+        'getComputedStyle(document.querySelector("#lattice")).backgroundImage',
+      ),
+      "none",
+    );
+    assert.equal(await js('document.querySelector("#advanced").open'), false);
     assert.equal(await js('document.querySelector("#evidence").open'), false);
     assert.equal(
       await js(
@@ -132,9 +167,9 @@ test(
       ),
       1,
     );
-    assert.match(
-      await js('document.querySelector("#diagram-note").textContent'),
-      /one encoded/,
+    assert.equal(
+      await js('document.querySelector("#diagram-title").textContent'),
+      "Logical circuit",
     );
     assert.equal(
       await js("getComputedStyle(document.body).backgroundColor"),
@@ -147,23 +182,131 @@ test(
       true,
     );
     await screenshot("paper-default-desktop");
-    assert.equal(await js('document.querySelector("#circuit-text").getBoundingClientRect().height > 80'), true);
-    assert.match(await js('document.querySelector("#circuit-text").value'), /QUBIT_COORDS/);
-    const suppliedExamples = await js('fetch("/api/layout").then(r=>r.json()).then(d=>d.examples)');
-    const exampleIds = suppliedExamples.map(e => e.id);
+    assert.equal(
+      await js(
+        'document.querySelector("#circuit-text").getBoundingClientRect().height > 80',
+      ),
+      true,
+    );
+    assert.match(
+      await js('document.querySelector("#circuit-text").value'),
+      /QUBIT_COORDS/,
+    );
+    const suppliedExamples = await js(
+      'fetch("/api/layout").then(r=>r.json()).then(d=>d.examples)',
+    );
+    const exampleIds = suppliedExamples.map((e) => e.id);
     assert.equal(exampleIds.length, 2);
     for (const choice of exampleIds) {
-      await js(`document.querySelector('#circuit-template').value='${choice}';document.querySelector('#circuit-template').dispatchEvent(new Event('change'))`);
-      assert.equal(await js('document.querySelector("#circuit-template").value'), choice);
-      assert.ok(await js('document.querySelector("#logical-text").value.length > 0'));
-      assert.equal(await js('document.querySelectorAll("#lattice .qubit").length'), 0, "never relabel old memory geometry as selected input");
-      assert.match(await js('document.querySelector("#grid-note").textContent'), /Run/);
+      await js(
+        `document.querySelector('#circuit-template').value='${choice}';document.querySelector('#circuit-template').dispatchEvent(new Event('change'))`,
+      );
+      assert.equal(
+        await js('document.querySelector("#circuit-template").value'),
+        choice,
+      );
+      assert.ok(
+        await js('document.querySelector("#logical-text").value.length > 0'),
+      );
+      const expected = choice === "phase_bell" ? 34 : 102;
+      assert.equal(
+        await js('document.querySelectorAll("#lattice .qubit").length'),
+        expected,
+        "selected circuit loads without Run",
+      );
+      assert.equal(
+        await js('document.querySelectorAll(".stabilizer-face").length'),
+        (expected / 17) * 8,
+      );
+      assert.equal(
+        await js('document.querySelector("#diagram-title").textContent'),
+        "Logical circuit",
+      );
+      assert.equal(
+        await js('document.querySelector("#circuit-view").dataset.mapping'),
+        "verified",
+      );
+      assert.ok(
+        await js(
+          'document.querySelectorAll("#timeline .check-row").length > 0',
+        ),
+      );
+      assert.ok(
+        await js(
+          'document.querySelectorAll("#timeline .time-header").length > 4',
+        ),
+      );
+      const selected = suppliedExamples.find((e) => e.id === choice);
+      assert.equal(
+        await js(
+          'document.querySelectorAll("#timeline [data-detector]").length',
+        ),
+        selected.layout.detectors.length,
+      );
+      await js(
+        'document.querySelector("#physical-scroll").scrollIntoView({behavior:"instant",block:"start"})',
+      );
+      await screenshot("preset-" + choice);
       assert.equal(posts.length, 0, "preset selection is local");
     }
-    await js(`document.querySelector('#circuit-template').value='surface_code:rotated_memory_z';document.querySelector('#circuit-template').dispatchEvent(new Event('change'));document.querySelector('#circuit-text').dispatchEvent(new Event('input'))`);
-    assert.equal(await js('document.querySelector("#circuit-template").value'), "custom");
+    if (process.env.QEC_PRESETS_ONLY) {
+      const results = [];
+      for (const choice of ["surface_code:rotated_memory_z", ...exampleIds]) {
+        await js(
+          `document.querySelector('#circuit-template').value=${JSON.stringify(choice)};document.querySelector('#circuit-template').dispatchEvent(new Event('change'));document.querySelector('#run').click()`,
+        );
+        await until(
+          '!document.querySelector("#run").disabled',
+          "public FPGA run",
+        );
+        const summary = await js(
+          'document.querySelector("#run-summary").textContent',
+        );
+        assert.match(summary, /Completed · FPGA/);
+        assert.equal(
+          await js('document.querySelector("#play").disabled'),
+          false,
+        );
+        results.push({ choice, summary });
+        const before = posts.length;
+        await js('document.querySelector("#play").click()');
+        assert.equal(
+          await js('document.querySelector("#scrubber").value'),
+          "1",
+        );
+        await js('document.querySelector("#play").click()');
+        assert.equal(posts.length, before, "public replay is local");
+      }
+      for (const width of [1280, 820, 390, 360]) {
+        await viewport(width);
+        assert.equal(
+          await js("document.documentElement.scrollWidth > innerWidth"),
+          false,
+        );
+      }
+      await js(
+        'document.querySelector("#physical-scroll").scrollIntoView({behavior:"instant",block:"start"})',
+      );
+      await screenshot("public-echo-mobile");
+      fs.writeFileSync(
+        path.join(process.env.QEC_SCREENSHOTS_DIR, "public-runs.json"),
+        JSON.stringify(results, null, 2),
+      );
+      assert.deepEqual(errors, []);
+      console.log(JSON.stringify(results));
+      return;
+    }
+    await js(
+      `document.querySelector('#circuit-template').value='surface_code:rotated_memory_z';document.querySelector('#circuit-template').dispatchEvent(new Event('change'));document.querySelector('#circuit-text').dispatchEvent(new Event('input'))`,
+    );
+    assert.equal(
+      await js('document.querySelector("#circuit-template").value'),
+      "custom",
+    );
     assert.equal(posts.length, 0);
-    await js(`document.querySelector('#circuit-template').value='surface_code:rotated_memory_z';document.querySelector('#circuit-template').dispatchEvent(new Event('change'))`);
+    await js(
+      `document.querySelector('#circuit-template').value='surface_code:rotated_memory_z';document.querySelector('#circuit-template').dispatchEvent(new Event('change'))`,
+    );
 
     for (const pauli of ["X", "Y", "Z"]) {
       await js(
@@ -203,11 +346,11 @@ test(
       2,
     );
     assert.match(
-      await js('document.querySelector("#diagram-note").textContent'),
-      /No logical.*mapping/i,
+      await js('document.querySelector("#diagram-title").textContent'),
+      /Physical circuit/,
     );
     assert.match(
-      await js('document.querySelector("#grid-note").textContent'),
+      await js('document.querySelector("#grid-note").title'),
       /QUBIT_COORDS/,
     );
     const count = posts.length;
@@ -249,13 +392,27 @@ test(
       "rgb(173, 221, 246)",
     );
     await screenshot("paper-input-two");
-    await js(`document.querySelector('[data-pauli=Z]').click();document.querySelector('#fault-tick').value=1;document.querySelector('#lattice [data-qubit="1"]').click()`);
+    await js(
+      `document.querySelector('[data-pauli=Z]').click();document.querySelector('#fault-tick').value=1;document.querySelector('#lattice [data-qubit="1"]').click()`,
+    );
     assert.equal(posts.length, count, "custom injection is local until Run");
-    assert.match(await js('document.querySelector("#scenario li").textContent'), /Z on q1 at tick 1/);
+    assert.match(
+      await js('document.querySelector("#scenario li").textContent'),
+      /Z on q1 at tick 1/,
+    );
     await js('document.querySelector("#run").click()');
-    await until('!document.querySelector("#play").disabled', "injected custom replay");
-    assert.deepEqual(JSON.parse(posts.at(-1).postData).faults, [{tick:1,qubit:1,pauli:"Z"}]);
-    assert.match(await js('document.querySelector("#scenario li").textContent'), /Z on q1 at tick 1/, "returned layout preserves faults");
+    await until(
+      '!document.querySelector("#play").disabled',
+      "injected custom replay",
+    );
+    assert.deepEqual(JSON.parse(posts.at(-1).postData).faults, [
+      { tick: 1, qubit: 1, pauli: "Z" },
+    ]);
+    assert.match(
+      await js('document.querySelector("#scenario li").textContent'),
+      /Z on q1 at tick 1/,
+      "returned layout preserves faults",
+    );
     await run(
       "R 0 1 2 3 4 5\nH 2\nTICK\nH 2\nX_ERROR(1) 5\nM 5\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(31) rec[-1]",
       "H 0\nS 0\nCX 0 1",
@@ -277,11 +434,11 @@ test(
       1,
     );
     assert.match(
-      await js('document.querySelector("#diagram-note").textContent'),
-      /as supplied.*mapping not verified/i,
+      await js('document.querySelector("#diagram-title").title'),
+      /mapping unverified/i,
     );
     assert.match(
-      await js('document.querySelector("#grid-note").textContent'),
+      await js('document.querySelector("#grid-note").title'),
       /Index grid/,
     );
     await screenshot("paper-logical-and-physical");
@@ -361,39 +518,91 @@ test(
       "first input wire is reachable",
     );
     // These small unencoded fixtures are compiler/UI smoke tests, not presets.
-    for (const [name, count] of [["bare_phase_bell", 2], ["bare_two_repetition_echo", 6]]) {
-      await run(fs.readFileSync(path.join(__dirname, "fixtures", name + ".stim"), "utf8"));
-      assert.equal(await js('document.querySelectorAll("#lattice .qubit").length'), count);
+    for (const [name, count] of [
+      ["bare_phase_bell", 2],
+      ["bare_two_repetition_echo", 6],
+    ]) {
+      await run(
+        fs.readFileSync(
+          path.join(__dirname, "fixtures", name + ".stim"),
+          "utf8",
+        ),
+      );
+      assert.equal(
+        await js('document.querySelectorAll("#lattice .qubit").length'),
+        count,
+      );
     }
     let runnableExamples = 0;
     for (const choice of exampleIds) {
       const before = posts.length;
-      await js(`document.querySelector('#circuit-template').value='${choice}';document.querySelector('#circuit-template').dispatchEvent(new Event('change'))`);
+      await js(
+        `document.querySelector('#circuit-template').value='${choice}';document.querySelector('#circuit-template').dispatchEvent(new Event('change'))`,
+      );
       assert.equal(posts.length, before, "named selection never runs");
       assert.equal(await js('document.querySelector("#play").disabled'), true);
-      assert.match(await js('document.querySelector("#scenario").textContent'), /No faults/);
-      const entry = suppliedExamples.find(e => e.id === choice);
+      assert.match(
+        await js('document.querySelector("#scenario").textContent'),
+        /No faults/,
+      );
+      const entry = suppliedExamples.find((e) => e.id === choice);
       if (entry.decoder_compatible === false) {
         assert.equal(await js('document.querySelector("#run").disabled'), true);
-        assert.equal(await js('document.querySelector("#circuit-warning").textContent'), entry.decoder_limitation);
+        assert.equal(
+          await js('document.querySelector("#status").textContent'),
+          "Unsupported circuit",
+        );
         await js('document.querySelector("#run").click()');
-        assert.equal(posts.length, before, "unsupported encoding fails closed without decoder I/O");
+        assert.equal(
+          posts.length,
+          before,
+          "unsupported encoding fails closed without decoder I/O",
+        );
         continue;
       }
       runnableExamples++;
-      const selectedText = await js('document.querySelector("#circuit-text").value');
-      const selectedLogical = await js('document.querySelector("#logical-text").value');
+      const selectedText = await js(
+        'document.querySelector("#circuit-text").value',
+      );
+      const selectedLogical = await js(
+        'document.querySelector("#logical-text").value',
+      );
       await js('document.querySelector("#run").click()');
-      await until('!document.querySelector("#run").disabled', "encoded example finished");
-      assert.equal(await js('document.querySelector("#play").disabled'), false, await js('document.querySelector("#status").textContent'));
-      assert.ok(await js('document.querySelectorAll("#lattice .qubit").length > 17'), "encoded two-logical-qubit example is not a bare two-qubit circuit");
+      await until(
+        '!document.querySelector("#run").disabled',
+        "encoded example finished",
+      );
+      assert.equal(
+        await js('document.querySelector("#play").disabled'),
+        false,
+        await js('document.querySelector("#status").textContent'),
+      );
+      assert.ok(
+        await js('document.querySelectorAll("#lattice .qubit").length > 17'),
+        "encoded two-logical-qubit example is not a bare two-qubit circuit",
+      );
       assert.equal(posts.at(-1).url.endsWith("/api/circuit-run"), true);
       assert.equal(JSON.parse(posts.at(-1).postData).circuit, selectedText);
-      assert.equal(JSON.parse(posts.at(-1).postData).logical_circuit, selectedLogical);
-      assert.match(await js('document.querySelector("#diagram-title").textContent'), /Known encoded example/);
-      await js('document.querySelector("#logical-text").value += "\\nI 0";document.querySelector("#logical-text").dispatchEvent(new Event("input"))');
-      assert.match(await js('document.querySelector("#diagram-note").textContent'), /mapping not verified/);
-      assert.equal(posts.length, before + 1, "logical edits do not run or retain a verified mapping claim");
+      assert.equal(
+        JSON.parse(posts.at(-1).postData).logical_circuit,
+        selectedLogical,
+      );
+      assert.equal(
+        await js('document.querySelector("#diagram-title").textContent'),
+        "Logical circuit",
+      );
+      await js(
+        'document.querySelector("#logical-text").value += "\\nI 0";document.querySelector("#logical-text").dispatchEvent(new Event("input"))',
+      );
+      assert.equal(
+        await js('document.querySelector("#circuit-view").dataset.mapping'),
+        "unverified",
+      );
+      assert.equal(
+        posts.length,
+        before + 1,
+        "logical edits do not run or retain a verified mapping claim",
+      );
     }
     assert.deepEqual(errors, []);
     assert.equal(posts.length, 6 + runnableExamples);

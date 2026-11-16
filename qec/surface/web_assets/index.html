@@ -28,7 +28,7 @@
             <option value="custom">Custom Clifford circuit</option>
           </select>
         </label>
-        <p id="circuit-warning" class="failed" role="status" hidden></p>
+
         <label
           >Annotated Stim circuit<textarea
             id="circuit-text"
@@ -62,11 +62,7 @@
         aria-labelledby="configure-title"
       >
         <h2 id="configure-title">1 Configure · seed and noise</h2>
-        <p id="noise-note">
-          Memory uses its four noise rates; other circuits retain the noise in
-          the Stim text and can add gate depolarization. Noise parameters and
-          injected faults are applied on Run.
-        </p>
+
         <div class="settings">
           <label
             >Added gate depolarization
@@ -196,6 +192,8 @@
             <ul id="scenario" aria-label="Injected faults"></ul>
           </div>
           <div class="legend">
+            <span class="x-key">X stabilizer</span
+            ><span class="z-key">Z stabilizer</span>
             <span class="gate-key">Active gate</span
             ><span class="error-key">Error</span
             ><span class="detector-key">Detector flip</span
@@ -205,27 +203,23 @@
         <section aria-label="Circuit and detector timeline">
           <section id="circuit-view" aria-label="Logical or input circuit">
             <div class="section-head">
-              <h2 id="diagram-title">Logical memory</h2>
+              <h2 id="diagram-title">Logical circuit</h2>
             </div>
-            <p id="diagram-note">
-              Known surface-memory experiment · one encoded Z-memory wire.
-            </p>
+            <p id="diagram-note" hidden></p>
             <div id="diagram-scroll"><div id="circuit-diagram"></div></div>
           </section>
 
           <div class="section-head">
-            <h2>Measurement boundaries</h2>
+            <h2>Decoder bit</h2>
             <span id="event-count">0</span>
           </div>
-          <p id="boundary-note">
-            r0: first check round (tick 7) · r1: second check round (tick 14) ·
-            r2: third check round (tick 21) · r3: final data readout (also tick
-            21).
-          </p>
-          <div
-            id="timeline"
-            aria-label="Detector bits by measurement boundary"
-          ></div>
+          <p id="boundary-note" hidden></p>
+          <div id="timeline-scroll">
+            <div
+              id="timeline"
+              aria-label="Detector bits by measurement boundary"
+            ></div>
+          </div>
           <div id="result" aria-live="polite"></div>
         </section>
       </div>
