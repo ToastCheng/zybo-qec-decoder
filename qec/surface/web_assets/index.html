@@ -10,7 +10,6 @@
   <body>
     <header>
       <h1>QEC <span>/ Replay</span></h1>
-      <span id="source">Connecting…</span>
     </header>
     <main>
       <section
@@ -29,15 +28,15 @@
           </select>
         </label>
 
-        <label
-          >Annotated Stim circuit<textarea
-            id="circuit-text"
-            rows="6"
-            spellcheck="false"
-          ></textarea>
-        </label>
         <details id="advanced">
           <summary>Advanced</summary>
+          <label
+            >Annotated Stim circuit<textarea
+              id="circuit-text"
+              rows="6"
+              spellcheck="false"
+            ></textarea>
+          </label>
           <label
             >Reference Stim (optional)<textarea
               id="reference-text"
@@ -56,12 +55,12 @@
           </label>
         </details>
       </section>
-      <section
+      <details
         id="configure"
         class="workflow-step"
         aria-labelledby="configure-title"
       >
-        <h2 id="configure-title">Configure</h2>
+        <summary id="configure-title">Configure</summary>
 
         <div class="settings">
           <label
@@ -131,40 +130,8 @@
               required
           /></label>
         </div>
-      </section>
-      <section class="workflow-step run-step" aria-labelledby="run-title">
-        <h2 id="run-title">Simulate and decode</h2>
-        <button id="run" disabled>Run</button>
-        <output id="run-summary" aria-live="polite"></output>
-      </section>
-      <div class="replay">
-        <h2>Replay</h2>
-        <div class="transport">
-          <button id="back" aria-label="Previous tick" disabled>←</button>
-          <button id="play" disabled>Replay</button>
-          <button id="step" aria-label="Next tick" disabled>→</button>
-          <label
-            >Speed
-            <select id="speed">
-              <option value="0.5">0.5×</option>
-              <option value="1" selected>1×</option>
-              <option value="2">2×</option>
-              <option value="4">4×</option>
-            </select>
-          </label>
-          <output id="position">0 / 22</output>
-        </div>
-        <input
-          id="scrubber"
-          type="range"
-          min="0"
-          max="22"
-          value="0"
-          step="1"
-          aria-label="Circuit tick"
-          disabled
-        />
-      </div>
+      </details>
+
       <div id="status" role="status" aria-live="polite">Loading…</div>
       <div class="workspace">
         <section class="physical" aria-label="Circuit replay">
@@ -231,6 +198,7 @@
 
       <details id="evidence">
         <summary>Details</summary>
+        <span id="source" hidden>Connecting…</span>
         <p>
           Surface-memory faults enter before the selected tick's operations.
           Tick 22 is a host correction overlay, not a physical gate. FPGA
@@ -251,6 +219,43 @@
         </details>
       </details>
     </main>
+    <footer id="control-dock" aria-label="Simulation and replay controls">
+      <div class="dock-inner">
+        <section class="run-step" aria-labelledby="run-title">
+          <h2 id="run-title" class="visually-hidden">Simulate and decode</h2>
+          <button id="run" disabled>Simulate and decode</button>
+        </section>
+        <div class="replay">
+          <h2 class="visually-hidden">Replay</h2>
+          <div class="transport">
+            <button id="back" aria-label="Previous tick" disabled>←</button>
+            <button id="play" aria-label="Play" title="Play" disabled>▶</button>
+            <button id="step" aria-label="Next tick" disabled>→</button>
+            <label
+              >Speed
+              <select id="speed">
+                <option value="0.5">0.5×</option>
+                <option value="1" selected>1×</option>
+                <option value="2">2×</option>
+                <option value="4">4×</option>
+              </select>
+            </label>
+            <output id="position">0 / 22</output>
+          </div>
+          <input
+            id="scrubber"
+            type="range"
+            min="0"
+            max="22"
+            value="0"
+            step="1"
+            aria-label="Circuit tick"
+            disabled
+          />
+        </div>
+        <output id="run-summary" aria-live="polite"></output>
+      </div>
+    </footer>
     <noscript>JavaScript required.</noscript>
   </body>
 </html>

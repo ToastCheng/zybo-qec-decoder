@@ -121,8 +121,8 @@ test(
     );
     assert.equal(await js('document.querySelector("#scenario").tagName'), "UL");
     assert.equal(
-      await js('document.querySelector("#circuit-text").closest("details")'),
-      null,
+      await js('document.querySelector("#circuit-text").closest("details").id'),
+      "advanced",
     );
     assert.equal(
       await js(
@@ -131,7 +131,7 @@ test(
       "circuit-editor",
     );
     assert.equal(
-      await js('document.querySelector("#seed").closest("section").id'),
+      await js('document.querySelector("#seed").closest("details").id'),
       "configure",
     );
     assert.deepEqual(
@@ -176,7 +176,20 @@ test(
       await js('document.querySelector("#scenario").textContent'),
       "No faults",
     );
+    const assertDockFits = async () => {
+      await until(
+        '(() => {const dock=document.querySelector("#control-dock").getBoundingClientRect();return dock.bottom<=innerHeight+1 && ["run","play","back","step","speed","scrubber"].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.top>=dock.top && r.bottom<=innerHeight})})()',
+        "bottom controls fit viewport",
+      );
+      assert.equal(
+        await js(
+          'getComputedStyle(document.querySelector("#control-dock")).position',
+        ),
+        "fixed",
+      );
+    };
     const assertPresetFits = async (name) => {
+      await assertDockFits();
       await until(
         '(() => {const container=document.querySelector("#physical-scroll"),b=container.getBoundingClientRect();return container.scrollWidth<=container.clientWidth && container.scrollHeight<=container.clientHeight && [...document.querySelectorAll("#lattice .qubit")].every(e=>{const q=e.getBoundingClientRect();return q.left>=b.left-1 && q.right<=b.right+1 && q.top>=b.top-1 && q.bottom<=b.bottom+1})})()',
         name + " all qubits fit",
@@ -227,6 +240,9 @@ test(
       true,
     );
     await screenshot("paper-default-desktop");
+    assert.equal(await js('document.querySelector("#configure").open'), false);
+    assert.equal(await js('document.querySelector("header #source")'), null);
+    await js('document.querySelector("#advanced").open=true');
     assert.equal(
       await js(
         'document.querySelector("#circuit-text").getBoundingClientRect().height > 80',
@@ -237,6 +253,7 @@ test(
       await js('document.querySelector("#circuit-text").value'),
       /QUBIT_COORDS/,
     );
+    await js('document.querySelector("#advanced").open=false');
     const suppliedExamples = await js(
       'fetch("/api/layout").then(r=>r.json()).then(d=>d.examples)',
     );
@@ -291,6 +308,21 @@ test(
       for (const width of [1280, 820, 390, 360]) {
         await viewport(width);
         await assertPresetFits(choice + " at " + width);
+        await js('document.querySelector("#configure").open=true');
+        assert.equal(
+          await js(
+            'Math.abs(document.querySelector("#seed").getBoundingClientRect().top-document.querySelector("#added-noise").getBoundingClientRect().top)<1',
+          ),
+          true,
+          "seed and depolarization share a row",
+        );
+        assert.equal(
+          await js(
+            'document.querySelector("#seed").getBoundingClientRect().width<=140',
+          ),
+          true,
+        );
+        await js('document.querySelector("#configure").open=false');
         assert.equal(
           await js("document.documentElement.scrollWidth > innerWidth"),
           false,
@@ -346,6 +378,13 @@ test(
           false,
         );
       }
+      await js(
+        'window.scrollTo({top:document.body.scrollHeight,behavior:"instant"})',
+      );
+      await until(
+        'document.querySelector("main").getBoundingClientRect().bottom <= document.querySelector("#control-dock").getBoundingClientRect().top',
+        "last content clears fixed dock",
+      );
       await js(
         'document.querySelector("#physical-scroll").scrollIntoView({behavior:"instant",block:"start"})',
       );

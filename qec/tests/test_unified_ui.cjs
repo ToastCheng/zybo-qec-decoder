@@ -2,6 +2,22 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const app = require("../surface/web_assets/app.js");
 
+test("configuration and editor are collapsed and controls live in the bottom dock", () => {
+  const html = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../surface/web_assets/index.html"),
+    "utf8",
+  );
+  assert.match(html, /<details\s+id="configure"/);
+  assert.match(html, /<summary id="configure-title">Configure<\/summary>/);
+  assert.match(html, /id="control-dock"/);
+  assert.match(html, /id="play"[^>]*aria-label="Play"[^>]*>▶<\/button>/);
+  assert.ok(html.indexOf('id="advanced"') < html.indexOf('id="circuit-text"'));
+  assert.doesNotMatch(
+    html.slice(html.indexOf("<header>"), html.indexOf("</header>")),
+    /id="source"/,
+  );
+});
+
 test("preset patches wrap within the available width without losing qubits", () => {
   const layout = { data: [], checks: [] };
   for (let patch = 0; patch < 6; patch++) {
@@ -38,9 +54,9 @@ test("headings are concise and the example-fault control is absent", () => {
     require("node:path").join(__dirname, "../surface/web_assets/index.html"),
     "utf8",
   );
-  assert.match(html, /id="configure-title">Configure<\/h2>/);
-  assert.match(html, /id="run-title">Simulate and decode<\/h2>/);
-  assert.match(html, /<h2>Replay<\/h2>/);
+  assert.match(html, /id="configure-title">Configure<\/summary>/);
+  assert.match(html, /id="run-title"[^>]*>Simulate and decode<\/h2>/);
+  assert.match(html, /<h2[^>]*>Replay<\/h2>/);
   assert.doesNotMatch(html, /id="example"|Example fault/);
 });
 

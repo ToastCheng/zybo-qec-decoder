@@ -134,17 +134,17 @@ test("minimal page exposes replay, fault time, speed and collapsed evidence", ()
   assert.ok(!html.includes("<footer>"));
   assert.ok(html.includes("Host correction"));
   assert.ok(
-    html.indexOf('id="play"') < html.indexOf('id="lattice"'),
-    "Play stays above the circuit",
+    html.indexOf('id="play"') > html.indexOf('id="control-dock"'),
+    "Play belongs to the fixed bottom dock",
   );
   assert.ok(
     html.indexOf('id="status"') < html.indexOf('id="lattice"'),
     "load/API errors stay above the circuit",
   );
   assert.match(html, /id="play"[^>]*disabled/);
-  assert.match(html, /id="configure-title">Configure<\/h2>/);
+  assert.match(html, /id="configure-title">Configure<\/summary>/);
   assert.match(html, /Simulate and decode/);
-  assert.match(html, /<h2>Replay<\/h2>/);
+  assert.match(html, /<h2[^>]*>Replay<\/h2>/);
   for (const id of [
     "run",
     "circuit-template",
@@ -157,5 +157,5 @@ test("minimal page exposes replay, fault time, speed and collapsed evidence", ()
   ]) {
     assert.ok(html.includes(`id="${id}"`), id);
   }
-  assert.match(html, /id="play"[^>]*>Replay/);
+  assert.match(html, /id="play"[^>]*>▶/);
 });

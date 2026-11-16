@@ -164,6 +164,11 @@ test(
       "ready",
     );
     await js('document.getElementById("play").click()');
+    assert.equal(await js('document.getElementById("play").textContent'), "⏸");
+    assert.equal(
+      await js('document.getElementById("play").getAttribute("aria-label")'),
+      "Pause",
+    );
     assert.equal(
       await js('document.getElementById("position").textContent'),
       "1 / 22",
@@ -252,10 +257,7 @@ test(
     await js(
       'document.getElementById("play").click(); document.getElementById("back").click(); document.getElementById("step").click()',
     );
-    assert.equal(
-      await js('document.getElementById("play").textContent'),
-      "Replay",
-    );
+    assert.equal(await js('document.getElementById("play").textContent'), "▶");
     await delay(100);
     assert.equal(
       posts.length,

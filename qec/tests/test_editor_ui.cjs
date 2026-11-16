@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const app = require("../surface/web_assets/app.js");
 
-test("circuit dropdown and visible Stim editor share a section separate from parameters", () => {
+test("circuit dropdown and Advanced editor stay separate from noise parameters", () => {
   const html = fs.readFileSync(
     path.join(__dirname, "../surface/web_assets/index.html"),
     "utf8",

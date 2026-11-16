@@ -121,8 +121,8 @@ connected FPGA. Only one experiment runs at a time.
 ### 4. Define the circuit, noise and seed
 
 Choose **Surface memory**, **Encoded Bell**, or **Encoded echo** from the circuit
-list. The editable **Stim circuit** sits directly below it; seed and noise controls
-are in a separate section. Editing the text changes the selection to Custom and
+list. Open **Advanced** to edit the annotated Stim circuit. Seed and noise controls
+are in **Configure**, collapsed by default. Editing the text changes the selection to Custom and
 invalidates the completed result without running anything.
 
 The [Bell example](../qec/examples/phase_bell.stim) uses two distance-3 patches
@@ -178,7 +178,7 @@ Editing settings does not run simulation or contact the board.
 
 ### 5. Simulate and decode
 
-Click **Run**. The server compiles the submitted experiment
+Click **Simulate and decode** in the fixed bottom bar. The server compiles the submitted experiment
 and samples one seeded Stim shot. In FPGA mode it reads the image's capacities,
 uploads the circuit's exact ordered graph and decodes that shot's detector bits.
 The FPGA returns an observable-flip mask and measured core cycles. Observable
@@ -189,7 +189,7 @@ an old result. The graph upload happens on Run, not on circuit edits or replay.
 
 ### 6. Replay the completed run
 
-Click **Replay**, **Pause**, or **Step**, or scrub the circuit tick. Playback
+Use the bottom bar's play/pause and step buttons, or scrub the circuit tick. Playback
 speed affects only visualization. Replay uses the completed response and sends
 no simulation, graph-upload or decoder requests. Editing invalidates the result
 until the next explicit Run.

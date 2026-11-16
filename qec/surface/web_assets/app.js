@@ -491,7 +491,10 @@ if (typeof document !== "undefined") {
   function stop() {
     clearTimeout(timer);
     timer = null;
-    $("play").textContent = "Replay";
+    $("play").textContent = "▶";
+    $("play").setAttribute("aria-label", "Play");
+    $("play").setAttribute("aria-pressed", "false");
+    $("play").title = "Play";
   }
   function seek(tick) {
     state.seek(tick);
@@ -711,7 +714,7 @@ if (typeof document !== "undefined") {
     const unsupported = example?.decoder_compatible === false;
 
     $("run").disabled = pending || inFlight || unsupported;
-    $("run").textContent = pending ? "Running…" : "Run";
+    $("run").textContent = pending ? "Running…" : "Simulate and decode";
     document
       .querySelectorAll(
         "#configure input, #configure select, #configure button, #circuit-editor input, #circuit-editor textarea, #circuit-editor select, .toolbar input, .toolbar button",
@@ -972,7 +975,10 @@ if (typeof document !== "undefined") {
       return;
     }
     if (state.tick >= state.endTick) seek(0);
-    $("play").textContent = "Pause";
+    $("play").textContent = "⏸";
+    $("play").setAttribute("aria-label", "Pause");
+    $("play").setAttribute("aria-pressed", "true");
+    $("play").title = "Pause";
     advance();
   };
 
@@ -1003,6 +1009,12 @@ if (typeof document !== "undefined") {
     }
   });
   let latticeWidth = 0;
+  new ResizeObserver(([entry]) => {
+    document.documentElement.style.setProperty(
+      "--dock-height",
+      `${entry.target.getBoundingClientRect().height}px`,
+    );
+  }).observe($("control-dock"));
   new ResizeObserver(([entry]) => {
     const width = entry.contentRect.width;
     if (width > 0 && Math.abs(width - latticeWidth) > 1) {
