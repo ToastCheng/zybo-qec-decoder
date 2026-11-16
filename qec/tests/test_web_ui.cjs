@@ -142,9 +142,9 @@ test("minimal page exposes replay, fault time, speed and collapsed evidence", ()
     "load/API errors stay above the circuit",
   );
   assert.match(html, /id="play"[^>]*disabled/);
-  assert.match(html, /1 Configure/);
-  assert.match(html, /2 Simulate/);
-  assert.match(html, /3 Replay/);
+  assert.match(html, /id="configure-title">Configure<\/h2>/);
+  assert.match(html, /Simulate and decode/);
+  assert.match(html, /<h2>Replay<\/h2>/);
   for (const id of [
     "run",
     "circuit-template",

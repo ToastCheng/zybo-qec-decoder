@@ -159,6 +159,51 @@ test(
       ),
       "none",
     );
+    assert.equal(
+      await js('document.querySelector("#configure-title").textContent'),
+      "Configure",
+    );
+    assert.equal(
+      await js('document.querySelector("#run-title").textContent'),
+      "Simulate and decode",
+    );
+    assert.equal(
+      await js('document.querySelector(".replay > h2").textContent'),
+      "Replay",
+    );
+    assert.equal(await js('document.querySelector("#example")'), null);
+    assert.equal(
+      await js('document.querySelector("#scenario").textContent'),
+      "No faults",
+    );
+    const assertPresetFits = async (name) => {
+      await until(
+        '(() => {const container=document.querySelector("#physical-scroll"),b=container.getBoundingClientRect();return container.scrollWidth<=container.clientWidth && container.scrollHeight<=container.clientHeight && [...document.querySelectorAll("#lattice .qubit")].every(e=>{const q=e.getBoundingClientRect();return q.left>=b.left-1 && q.right<=b.right+1 && q.top>=b.top-1 && q.bottom<=b.bottom+1})})()',
+        name + " all qubits fit",
+      );
+      assert.equal(
+        await js(
+          'document.querySelector("#physical-scroll").scrollWidth > document.querySelector("#physical-scroll").clientWidth',
+        ),
+        false,
+        name + " no horizontal crop",
+      );
+      assert.equal(
+        await js(
+          'document.querySelector("#physical-scroll").scrollHeight > document.querySelector("#physical-scroll").clientHeight',
+        ),
+        false,
+        name + " no vertical crop",
+      );
+      assert.equal(
+        await js(
+          'Math.abs(document.querySelector(".physical").getBoundingClientRect().width-document.querySelector(".workspace").getBoundingClientRect().width)<3',
+        ),
+        true,
+        name + " full-width lattice",
+      );
+    };
+    await assertPresetFits("memory");
     assert.equal(await js('document.querySelector("#advanced").open'), false);
     assert.equal(await js('document.querySelector("#evidence").open'), false);
     assert.equal(
@@ -243,6 +288,16 @@ test(
         ),
         selected.layout.detectors.length,
       );
+      for (const width of [1280, 820, 390, 360]) {
+        await viewport(width);
+        await assertPresetFits(choice + " at " + width);
+        assert.equal(
+          await js("document.documentElement.scrollWidth > innerWidth"),
+          false,
+        );
+      }
+      await viewport(1280);
+      await assertPresetFits(choice);
       await js(
         'document.querySelector("#physical-scroll").scrollIntoView({behavior:"instant",block:"start"})',
       );
@@ -275,10 +330,17 @@ test(
           "1",
         );
         await js('document.querySelector("#play").click()');
+        assert.doesNotMatch(
+          await js(
+            '[...document.querySelectorAll("#lattice em")].map(e=>e.textContent).join(" ")',
+          ),
+          /ERROR|DEPOLARIZE|PAULI_CHANNEL/,
+        );
         assert.equal(posts.length, before, "public replay is local");
       }
       for (const width of [1280, 820, 390, 360]) {
         await viewport(width);
+        await assertPresetFits("public echo at " + width);
         assert.equal(
           await js("document.documentElement.scrollWidth > innerWidth"),
           false,
@@ -389,7 +451,7 @@ test(
       await js(
         'getComputedStyle(document.querySelector("#circuit-diagram .gate.active rect")).fill',
       ),
-      "rgb(173, 221, 246)",
+      "rgb(56, 198, 196)",
     );
     await screenshot("paper-input-two");
     await js(

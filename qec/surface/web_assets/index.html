@@ -61,7 +61,7 @@
         class="workflow-step"
         aria-labelledby="configure-title"
       >
-        <h2 id="configure-title">1 Configure · seed and noise</h2>
+        <h2 id="configure-title">Configure</h2>
 
         <div class="settings">
           <label
@@ -133,12 +133,12 @@
         </div>
       </section>
       <section class="workflow-step run-step" aria-labelledby="run-title">
-        <h2 id="run-title">2 Simulate + decode</h2>
+        <h2 id="run-title">Simulate and decode</h2>
         <button id="run" disabled>Run</button>
         <output id="run-summary" aria-live="polite"></output>
       </section>
       <div class="replay">
-        <h2>3 Replay</h2>
+        <h2>Replay</h2>
         <div class="transport">
           <button id="back" aria-label="Previous tick" disabled>←</button>
           <button id="play" disabled>Replay</button>
@@ -187,7 +187,7 @@
               >Fault tick
               <input id="fault-tick" type="number" min="0" max="21" value="0"
             /></label>
-            <button id="example" disabled>Example fault</button>
+
             <button id="reset" disabled>Clear faults</button>
             <ul id="scenario" aria-label="Injected faults"></ul>
           </div>
@@ -200,7 +200,10 @@
             ><span class="fix-key">Host correction</span>
           </div>
         </section>
-        <section aria-label="Circuit and detector timeline">
+        <section
+          class="analysis-panels"
+          aria-label="Circuit and detector timeline"
+        >
           <section id="circuit-view" aria-label="Logical or input circuit">
             <div class="section-head">
               <h2 id="diagram-title">Logical circuit</h2>
@@ -209,18 +212,20 @@
             <div id="diagram-scroll"><div id="circuit-diagram"></div></div>
           </section>
 
-          <div class="section-head">
-            <h2>Decoder bit</h2>
-            <span id="event-count">0</span>
-          </div>
-          <p id="boundary-note" hidden></p>
-          <div id="timeline-scroll">
-            <div
-              id="timeline"
-              aria-label="Detector bits by measurement boundary"
-            ></div>
-          </div>
-          <div id="result" aria-live="polite"></div>
+          <section id="decoder-view">
+            <div class="section-head">
+              <h2>Decoder bit</h2>
+              <span id="event-count">0</span>
+            </div>
+            <p id="boundary-note" hidden></p>
+            <div id="timeline-scroll">
+              <div
+                id="timeline"
+                aria-label="Detector bits by measurement boundary"
+              ></div>
+            </div>
+            <div id="result" aria-live="polite"></div>
+          </section>
         </section>
       </div>
 

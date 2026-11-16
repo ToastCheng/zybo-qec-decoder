@@ -8,6 +8,9 @@
   --amber: #f4bd61;
   --flip: #e99086;
   --mint: #bfe6cd;
+  --active: #38c6c4;
+  --active-ink: #074644;
+  --active-border: #087f82;
   --mono: "DejaVu Sans Mono", "Liberation Mono", monospace;
   --sans: "Trebuchet MS", "Liberation Sans", sans-serif;
 }
@@ -122,8 +125,7 @@ label {
   color: var(--muted);
 }
 .workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  display: block;
   border: 1px solid var(--line);
   background: var(--panel);
 }
@@ -131,7 +133,21 @@ label {
   min-width: 0;
 }
 .physical {
-  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.analysis-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.analysis-panels > section {
+  min-width: 0;
+}
+#decoder-view {
+  border-left: 1px solid var(--line);
+}
+#physical-scroll.patch-layout {
+  max-height: none;
+  overflow: visible;
 }
 .section-head {
   display: flex;
@@ -214,7 +230,7 @@ h2 {
   stroke: #81a8cb;
 }
 .stabilizer-face.basis-Z {
-  fill: #e8daf0;
+  fill: #d8b4e8;
   stroke: #b393c6;
 }
 .check-qubit.basis-X,
@@ -223,21 +239,21 @@ h2 {
 }
 .check-qubit.basis-Z,
 .z-key:before {
-  background: #e8daf0;
+  background: #d8b4e8;
 }
 .qubit.active {
-  background: #adddf6;
-  color: #153c55;
-  border-color: #35799e;
-  outline: 2px solid #35799e;
+  background: var(--active);
+  color: var(--active-ink);
+  border-color: var(--active-border);
+  outline: 2px solid var(--active-border);
   outline-offset: 3px;
 }
 .qubit em {
   position: absolute;
   top: -18px;
   font: 700 10px var(--mono);
-  color: #153c55;
-  background: #adddf6;
+  color: var(--active-ink);
+  background: var(--active);
   border-radius: 2px;
   padding: 1px 4px;
 }
@@ -288,7 +304,7 @@ h2 {
   border: 1px solid #566662;
 }
 .gate-key:before {
-  background: #adddf6;
+  background: var(--active);
 }
 .error-key:before {
   background: var(--amber);
@@ -527,8 +543,12 @@ pre {
   header {
     padding: 14px 16px;
   }
-  .workspace {
+  .analysis-panels {
     grid-template-columns: minmax(0, 1fr);
+  }
+  #decoder-view {
+    border-left: 0;
+    border-top: 1px solid var(--line);
   }
   .physical {
     border-right: 0;
@@ -588,8 +608,6 @@ pre {
 }
 #circuit-view {
   min-width: 0;
-  margin-top: 12px;
-  border: 1px solid var(--line);
   background: var(--panel);
 }
 #diagram-scroll {
@@ -629,7 +647,7 @@ pre {
 }
 .gate.active rect,
 .gate.active .target circle {
-  fill: #adddf6;
+  fill: var(--active);
 }
 #timeline.generic-detectors {
   grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));

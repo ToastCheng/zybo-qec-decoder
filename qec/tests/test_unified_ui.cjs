@@ -2,6 +2,48 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const app = require("../surface/web_assets/app.js");
 
+test("preset patches wrap within the available width without losing qubits", () => {
+  const layout = { data: [], checks: [] };
+  for (let patch = 0; patch < 6; patch++) {
+    const base = patch * 3;
+    layout.data.push(
+      { id: base, coords: [8 * patch + 1, 1] },
+      { id: base + 1, coords: [8 * patch + 3, 1] },
+    );
+    layout.checks.push({
+      id: base + 2,
+      coords: [8 * patch + 2, 0],
+      basis: "X",
+      support: [base, base + 1],
+    });
+  }
+  for (const width of [1100, 700, 328]) {
+    const grid = app.latticeGrid(layout, width);
+    assert.equal(grid.points.length, 18);
+    assert.ok(grid.width <= width);
+    assert.equal(grid.panels, 6);
+    assert.ok(
+      new Set(grid.points.map((q) => q.y)).size > 2,
+      "patches wrap into rows",
+    );
+    for (const q of grid.points) {
+      assert.ok(q.x >= 22 && q.x <= width - 22);
+      assert.ok(q.y >= 22 && q.y <= grid.height - 22);
+    }
+  }
+});
+
+test("headings are concise and the example-fault control is absent", () => {
+  const html = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "../surface/web_assets/index.html"),
+    "utf8",
+  );
+  assert.match(html, /id="configure-title">Configure<\/h2>/);
+  assert.match(html, /id="run-title">Simulate and decode<\/h2>/);
+  assert.match(html, /<h2>Replay<\/h2>/);
+  assert.doesNotMatch(html, /id="example"|Example fault/);
+});
+
 test("decoder matrix labels rows and rounds and retains every detector", () => {
   const layout = {
     rows: [

@@ -138,6 +138,11 @@ test(
       "configuration keeps the lattice prominent on desktop",
     );
     assert.equal(posts.length, 0, "page load must never run");
+    assert.equal(await js('document.querySelector("#example")'), null);
+    assert.equal(
+      await js('document.querySelector("#scenario").textContent'),
+      "No faults",
+    );
     assert.equal(await js('document.getElementById("seed").value'), "20261107");
     assert.deepEqual(
       await js(
@@ -149,6 +154,10 @@ test(
       '[...document.querySelectorAll(".settings input:not(#seed):not(#added-noise)")].forEach(e => {e.value="0";e.dispatchEvent(new Event("input"));})',
     );
     assert.equal(posts.length, 0, "settings edits must never run");
+    // Inject the regression fault explicitly; the page must start fault-free.
+    await js(
+      'document.querySelector("#fault-tick").value=8;document.querySelector("#lattice [data-qubit=\\"10\\"]").click()',
+    );
     await js('document.getElementById("run").click()');
     await until(
       'document.getElementById("play") && !document.getElementById("play").disabled && document.querySelectorAll(".qubit").length === 17',
@@ -164,8 +173,8 @@ test(
       await js(
         'getComputedStyle(document.querySelector(".qubit.active")).backgroundColor',
       ),
-      "rgb(173, 221, 246)",
-      "active gates have a distinct blue fill",
+      "rgb(56, 198, 196)",
+      "active gates have a distinct teal fill",
     );
     assert.match(
       await js('document.querySelector(".qubit.active").textContent'),
@@ -174,8 +183,8 @@ test(
     );
     assert.match(
       await js('document.getElementById("scenario").textContent'),
-      /Example.*X.*q10.*8/,
-      "deliberate fault clearly labeled, not hidden noise",
+      /X.*q10.*8/,
+      "explicitly injected regression fault is labeled",
     );
     await js('document.getElementById("speed").value="4"');
     await until('document.querySelector(".has-error")', "fault visible");
@@ -267,10 +276,10 @@ test(
     );
     await delay(100);
     assert.equal(posts.length, 1, "clear must never run");
-    await js('document.getElementById("example").click()');
+
     await js('document.querySelector(".data-qubit").click()');
     await delay(100);
-    assert.equal(posts.length, 1, "example and fault edits must never run");
+    assert.equal(posts.length, 1, "fault edits must never run");
     await js(
       'document.getElementById("reset").click(); document.getElementById("run").click()',
     );
@@ -288,9 +297,7 @@ test(
     await cdp("Fetch.enable", {
       patterns: [{ urlPattern: "*/api/run", requestStage: "Request" }],
     });
-    await js(
-      'document.getElementById("example").click(); document.getElementById("run").click()',
-    );
+    await js('document.getElementById("run").click()');
     await until(
       'document.getElementById("status").textContent.includes("Regression fixture: FPGA unavailable")',
       "source failure visible",
@@ -306,9 +313,7 @@ test(
       ),
     );
     await cdp("Fetch.disable");
-    await js(
-      'document.getElementById("example").click(); document.getElementById("run").click()',
-    );
+    await js('document.getElementById("run").click()');
     await until(
       '!document.getElementById("play").disabled',
       "source recovered",
@@ -366,6 +371,10 @@ test(
         deviceScaleFactor: 1,
         mobile: width === 390,
       });
+      await until(
+        "document.documentElement.scrollWidth <= innerWidth",
+        `responsive lattice settled at ${width}`,
+      );
       assert.equal(
         await js("document.documentElement.scrollWidth > innerWidth"),
         false,

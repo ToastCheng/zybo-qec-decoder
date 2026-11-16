@@ -135,6 +135,61 @@ function physicalGrid(qubits) {
     height: Math.max(120, ...points.map((q) => q.y + 40)),
   };
 }
+function latticeGrid(layout, availableWidth) {
+  const qubits = [...layout.data, ...layout.checks];
+  if (!layout.checks.length || !qubits.every((q) => q.coords?.length >= 2))
+    return physicalGrid(qubits);
+  // Extraction-check supports define patches; interpatch logical gates do not.
+  const neighbors = new Map(qubits.map((q) => [q.id, new Set()]));
+  for (const check of layout.checks) {
+    for (const id of check.support || []) {
+      neighbors.get(check.id).add(id);
+      neighbors.get(id)?.add(check.id);
+    }
+  }
+  const byId = new Map(qubits.map((q) => [q.id, q]));
+  const remaining = new Set([...byId.keys()].sort((a, b) => a - b));
+  const patches = [];
+  while (remaining.size) {
+    const pending = [remaining.values().next().value];
+    const patch = [];
+    while (pending.length) {
+      const id = pending.pop();
+      if (!remaining.delete(id)) continue;
+      patch.push(byId.get(id));
+      for (const other of neighbors.get(id))
+        if (remaining.has(other)) pending.push(other);
+    }
+    patches.push(physicalGrid(patch));
+  }
+  const tileWidth =
+    Math.ceil(Math.max(...patches.map((p) => p.width)) / 64) * 64;
+  const tileHeight =
+    Math.ceil(Math.max(...patches.map((p) => p.height)) / 64) * 64;
+  const width = Math.max(1, availableWidth);
+  const columns = Math.min(
+    patches.length,
+    Math.max(1, Math.floor(width / tileWidth)),
+  );
+  const scale = Math.min(1, width / tileWidth);
+  const offset = (width - columns * tileWidth * scale) / 2;
+  return {
+    points: patches.flatMap((patch, i) =>
+      patch.points.map((q) => ({
+        ...q,
+        x: offset + ((i % columns) * tileWidth + q.x) * scale,
+        y: (Math.floor(i / columns) * tileHeight + q.y) * scale,
+      })),
+    ),
+    width,
+    height: Math.ceil(patches.length / columns) * tileHeight * scale,
+    step: 64 * scale,
+    offsetX: offset + 40 * scale,
+    offsetY: 40 * scale,
+    panels: patches.length,
+    label: "Surface-code patches · QUBIT_COORDS geometry",
+  };
+}
 function cycleSummary(result) {
   const cycles = result.hardware?.cycles ?? result.cycles ?? "N/A (software)";
   const count = result.hardware?.chunks?.length || 0;
@@ -394,6 +449,7 @@ if (typeof module !== "undefined")
     maskBit,
     productGroups,
     physicalGrid,
+    latticeGrid,
     circuitDiagram,
     suppliedDiagram,
     runSettings,
@@ -629,7 +685,10 @@ if (typeof document !== "undefined") {
           "SHIFT_COORDS",
           "DETECTOR",
           "OBSERVABLE_INCLUDE",
-        ].includes(op.name),
+        ].includes(op.name) &&
+        !/^(?:[XYZ]_ERROR|DEPOLARIZE[12]|PAULI_CHANNEL_[12]|CORRELATED_ERROR|ELSE_CORRELATED_ERROR|E)$/.test(
+          op.name,
+        ),
     );
     const visible = result
       ? visibleDetectors(layout.detectors, result.detector_indices, tick)
@@ -660,10 +719,7 @@ if (typeof document !== "undefined") {
       .forEach((control) => {
         control.disabled = pending;
       });
-    $("run-title").textContent =
-      layout.source === "FPGA"
-        ? "2 Simulate + FPGA decode"
-        : "2 Simulate + software decode";
+    $("run-title").textContent = "Simulate and decode";
     $("run-summary").textContent = result
       ? `Completed · ${result.source} · seed ${result.settings?.seed ?? experiment?.seed ?? "not reported"} · prediction ${result.prediction} · observable ${result.observable} · cycles ${cycleSummary(result)}`
       : "";
@@ -678,11 +734,17 @@ if (typeof document !== "undefined") {
     const custom = layout.kind === "circuit";
     const selectedCustom =
       $("circuit-template").value !== "surface_code:rotated_memory_z";
-    const grid = physicalGrid([...layout.data, ...layout.checks]);
+    $("physical-scroll").hidden = !layoutCurrent;
+    const grid = latticeGrid(layout, $("physical-scroll").clientWidth || 328);
     const pointById = new Map(grid.points.map((q) => [q.id, q]));
     $("lattice").classList.add("index-lattice");
     $("lattice").style.width = `${grid.width}px`;
     $("lattice").style.height = `${grid.height}px`;
+    $("physical-scroll").classList.toggle("patch-layout", Boolean(grid.panels));
+    $("lattice").style.backgroundSize =
+      `${grid.step || 64}px ${grid.step || 64}px`;
+    $("lattice").style.backgroundPosition =
+      `${grid.offsetX ?? 40}px ${grid.offsetY ?? 40}px`;
     $("grid-note").textContent = `${grid.points.length} physical qubits`;
     $("grid-note").title = grid.label;
     const active = new Set(operations.flatMap((op) => op.targets));
@@ -790,11 +852,11 @@ if (typeof document !== "undefined") {
       .forEach((c) => {
         c.disabled = pending || !layoutCurrent;
       });
-    $("example").hidden = selectedCustom;
+
     $("scenario").replaceChildren();
     for (const fault of state.faults) {
       const item = document.createElement("li");
-      item.textContent = `${!selectedCustom && fault.tick === 8 && fault.qubit === 10 && fault.pauli === "X" ? "Example · " : ""}${fault.pauli} on q${fault.qubit} at tick ${fault.tick}`;
+      item.textContent = `${fault.pauli} on q${fault.qubit} at tick ${fault.tick}`;
       $("scenario").append(item);
     }
     if (!state.faults.length) {
@@ -913,13 +975,7 @@ if (typeof document !== "undefined") {
     $("play").textContent = "Pause";
     advance();
   };
-  $("example").onclick = () => {
-    if (pending || !state) return;
-    state.reset();
-    state.toggle(10, "X", 8);
-    $("fault-tick").value = 8;
-    invalidate();
-  };
+
   $("reset").onclick = () => {
     if (pending || !state) return;
     state.reset();
@@ -946,6 +1002,14 @@ if (typeof document !== "undefined") {
       $("play").click();
     }
   });
+  let latticeWidth = 0;
+  new ResizeObserver(([entry]) => {
+    const width = entry.contentRect.width;
+    if (width > 0 && Math.abs(width - latticeWidth) > 1) {
+      latticeWidth = width;
+      if (layout && state) render();
+    }
+  }).observe($("physical-scroll"));
   api("/api/layout")
     .then((data) => {
       layout = memoryLayout = validateLayout(data);
@@ -966,8 +1030,7 @@ if (typeof document !== "undefined") {
         );
       }
       state = new LabState(data.ticks.length - 1);
-      state.toggle(10, "X", 8);
-      $("fault-tick").value = 8;
+      $("fault-tick").value = 0;
       $("scrubber").max = state.lastTick + 1;
       $("fault-tick").max = state.lastTick;
       render();
