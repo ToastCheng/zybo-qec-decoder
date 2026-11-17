@@ -90,6 +90,11 @@ Each detector starts in its own cluster. Its parity is its syndrome bit. The
 boundary starts as a separate cluster and never drives growth. Per-edge growth,
 the merge forest and the prediction mask start at zero.
 
+A configured, width-valid zero syndrome returns zero prediction after one
+counted clock, without scanning work arrays. A later nonzero shot initializes
+every active entry before using it; reset, abort and graph validation are not
+bypassed.
+
 ### 2. Grow and merge
 
 Scan edges in their uploaded order. Ignore edges whose endpoints already belong
@@ -120,6 +125,12 @@ work bit and XOR the edge's observable mask into the prediction. If the leaf's
 work bit is 0, do not select the edge. In either case, clear the leaf work bit
 and remove the edge. When the forest is empty, all detector work bits must be
 zero. Missing leaves or residual detector bits produce a decode error.
+
+`FIND` still searches edges in order, but skips nonforest and removed edges in
+one clock before reading endpoints/work through registered stages. See the
+[measured core scan batch](core-performance.md) for paired nonempty timing,
+resource costs and the distinction between arrival-rate screening and a
+continuous-QEC claim.
 
 ### Worked shot
 

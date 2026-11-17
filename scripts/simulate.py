@@ -3,6 +3,7 @@
 import argparse
 import ast
 import random
+import shutil
 import subprocess
 import uuid
 from pathlib import Path
@@ -69,6 +70,16 @@ def main():
     )
     parser.add_argument("--build-dir", default=None)
     parser.add_argument(
+        "--vectors",
+        type=Path,
+        help="Existing core corpus; skips only the long-counter coverage requirement",
+    )
+    parser.add_argument(
+        "--core-source",
+        type=Path,
+        help="Explicit archived core RTL for reproducible comparisons",
+    )
+    parser.add_argument(
         "--vivado-bin", default="/home/toastcheng/amd/2025.2/Vivado/bin"
     )
     args = parser.parse_args()
@@ -82,9 +93,13 @@ def main():
     if build.exists() and (not build.is_dir() or any(build.iterdir())):
         parser.error("--build-dir must be new or empty")
     build.mkdir(parents=True, exist_ok=True)
-    if args.bench == "core":
+    if args.vectors and args.bench != "core":
+        parser.error("--vectors requires --bench core")
+    if args.vectors:
+        shutil.copyfile(args.vectors, build / "qec_vectors.txt")
+    elif args.bench == "core":
         write_vectors(root, build)
-    sources = [root / "fpga/rtl/common/qec_decoder.sv"]
+    sources = [(args.core_source or root / "fpga/rtl/common/qec_decoder.sv").resolve()]
     if args.bench in ("bridge", "counter"):
         sources.append(root / "fpga/rtl/common/ps_bridge.sv")
     bench_name = "decoder" if args.bench == "core" else args.bench
@@ -94,6 +109,8 @@ def main():
         ["xelab", f"tb_{bench_name}", "-s", "qec_sim"],
         ["xsim", "qec_sim", "-runall"],
     ]
+    if args.vectors:
+        commands[-1].extend(["-testplusarg", "profile_only"])
     text = ""
     for command in commands:
         command[0] = str(Path(args.vivado_bin) / command[0])

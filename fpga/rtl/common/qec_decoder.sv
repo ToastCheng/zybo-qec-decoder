@@ -185,21 +185,28 @@ module qec_decoder #(
                         end
                     end
                     INIT: begin
-                        if (cursor <= detector_count) begin
-                            label[cursor] <= VB'(cursor);
-                            parity[cursor] <= cursor < detector_count ? input_shot[cursor] : 1'b0;
-                            work[cursor] <= cursor < detector_count ? input_shot[cursor] : 1'b0;
-                            degree[cursor] <= 0;
-                        end
-                        if (cursor < edge_count) begin
-                            growth[cursor] <= 0;
-                            forest[cursor] <= 0;
-                        end
-                        if (cursor >= detector_count && cursor + 1 >= edge_count) begin
-                            cursor <= 0;
-                            state <= CHECK;
+                        // IDLE already checked the configured detector width. Zero
+                        // needs no forest: keep one counted clock and do not consult
+                        // stale work arrays. The next nonzero shot rewrites them all.
+                        if (input_shot == 0) begin
+                            state <= HOLD;
                         end else begin
-                            cursor <= cursor + 1;
+                            if (cursor <= detector_count) begin
+                                label[cursor] <= VB'(cursor);
+                                parity[cursor] <= cursor < detector_count ? input_shot[cursor] : 1'b0;
+                                work[cursor] <= cursor < detector_count ? input_shot[cursor] : 1'b0;
+                                degree[cursor] <= 0;
+                            end
+                            if (cursor < edge_count) begin
+                                growth[cursor] <= 0;
+                                forest[cursor] <= 0;
+                            end
+                            if (cursor >= detector_count && cursor + 1 >= edge_count) begin
+                                cursor <= 0;
+                                state <= CHECK;
+                            end else begin
+                                cursor <= cursor + 1;
+                            end
                         end
                     end
                     CHECK: begin
@@ -298,11 +305,23 @@ module qec_decoder #(
                         end
                     end
                     FIND: begin
-                        a <= VB'(graph_a[edge_cursor]);
-                        b <= VB'(graph_b[edge_cursor]);
-                        edge_mask <= graph_mask[edge_cursor];
-                        edge_forest <= forest[edge_cursor];
-                        state <= FIND_VALUES;
+                        // A removed/nonforest edge cannot be the leaf's edge. Skip it
+                        // before the registered endpoint/work pipeline, preserving the
+                        // first remaining incident edge and all growth/peeling ties.
+                        if (!forest[edge_cursor]) begin
+                            if (edge_cursor + 1 >= edge_count) begin
+                                decode_error <= 1;
+                                state <= HOLD;
+                            end else begin
+                                edge_cursor <= edge_cursor + 1;
+                            end
+                        end else begin
+                            a <= VB'(graph_a[edge_cursor]);
+                            b <= VB'(graph_b[edge_cursor]);
+                            edge_mask <= graph_mask[edge_cursor];
+                            edge_forest <= forest[edge_cursor];
+                            state <= FIND_VALUES;
+                        end
                     end
                     FIND_VALUES: begin
                         other <= (a == leaf) ? b : a;

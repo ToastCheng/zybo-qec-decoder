@@ -85,6 +85,10 @@ observable prediction. A cycle counter measures acceptance to first result;
 result-hold stalls do not add cycles. Shot abort preserves the graph; full reset
 invalidates it. See [decoder design](decoder-design.md) for framing and recovery.
 
+The [core performance study](core-performance.md) records the measured scan
+optimization, independent RTL cycle checks and fresh Zybo timing/resource costs.
+Its new-core results are simulated/routed, not new board measurements.
+
 ## Build and check entry points
 
 The root [Makefile](../Makefile) selects the current design only. `make build`

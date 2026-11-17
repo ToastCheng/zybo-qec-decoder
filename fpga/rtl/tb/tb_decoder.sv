@@ -29,6 +29,8 @@ module tb_decoder;
     wire [31:0] prediction;
     wire [31:0] cycles;
     integer fd, parsed, graphs, g, n, m, o, shots, e, s, a, b, expected_error;
+    integer profile_fd, trace_fd;
+    integer state_cycles [0:16];
     integer total = 0;
     logic [31:0] maximum_cycles = 0;
     logic [31:0] mask, expected_prediction;
@@ -91,12 +93,74 @@ module tb_decoder;
         out_ready = 0;
         if (!in_ready || out_valid) $fatal(1, "did not retire");
     endtask
+    // Drive valid/ready continuously to measure the best possible initiation
+    // interval, rather than inferring it from the core's reported cycle field.
+    task check_initiation;
+        integer edge_number, accepted, completed, last_accept, last_result;
+        integer last_latency, initiation_fd;
+        bit accepting;
+        bit was_valid;
+        initiation_fd = $fopen("initiation.csv", "w");
+        $fwrite(initiation_fd, "previous_syndrome,latency,acceptance_gap\n");
+        edge_number = 0;
+        accepted = 0;
+        completed = 0;
+        last_accept = 0;
+        last_result = 0;
+        last_latency = 0;
+        @(negedge clk);
+        in_valid = 1;
+        out_ready = 1;
+        syndrome = 0;
+        while (completed < 4) begin
+            @(posedge clk);
+            edge_number = edge_number + 1;
+            accepting = in_valid && in_ready;
+            was_valid = out_valid;
+            if (accepting) begin
+                if (accepted > 0) begin
+                    if (edge_number - last_accept != last_latency + 2)
+                        $fatal(1, "unexpected unblocked initiation interval");
+                    $fwrite(initiation_fd, "%0d,%0d,%0d\n", (accepted - 1) % 2, last_latency, edge_number - last_accept);
+                end
+                last_accept = edge_number;
+                accepted = accepted + 1;
+            end
+            #1;
+            if (out_valid && !was_valid) begin
+                last_result = edge_number;
+                last_latency = last_result - last_accept;
+                if (cycles != last_latency || decode_error
+                    || prediction != ((completed % 2) ? 32'h80000005 : 0))
+                    $fatal(1, "unblocked result differs from independent edges");
+                completed = completed + 1;
+            end
+            @(negedge clk);
+            if (accepting) syndrome = 128'(accepted % 2);
+            if (accepted == 4) in_valid = 0;
+        end
+        tick();
+        @(negedge clk);
+        out_ready = 0;
+        in_valid = 0;
+        if (!in_ready || out_valid) $fatal(1, "unblocked retirement failed");
+        $fclose(initiation_fd);
+    endtask
     task check_shot(input logic [127:0] value, input logic [31:0] expected, input bit error_expected);
         integer elapsed;
+        integer i;
         logic [31:0] held_cycles;
         launch(value);
         elapsed = 0;
+        for (i = 0; i < 17; i = i + 1) state_cycles[i] = 0;
         while (!out_valid) begin
+            state_cycles[dut.state] = state_cycles[dut.state] + 1;
+            // Compare ordered merges and peeled edges across source snapshots;
+            // observable agreement alone could conceal a changed tie policy.
+            if (dut.state == 7 && dut.roots_differ && dut.expanded >= 2)
+                $fwrite(trace_fd, "%0d,%0d,merge,%0d,%0d,%0d\n", g, s, dut.edge_cursor, dut.winner, dut.loser);
+            if (dut.state == 14 && dut.edge_forest && (dut.a == dut.leaf || dut.b == dut.leaf))
+                $fwrite(trace_fd, "%0d,%0d,peel,%0d,%0d,%0d\n", g, s, dut.edge_cursor, dut.leaf, dut.leaf_work);
             tick();
             elapsed = elapsed + 1;
             if (elapsed > 1000000) $fatal(1, "algorithm timeout");
@@ -106,6 +170,9 @@ module tb_decoder;
                 g, value, prediction, expected, decode_error, error_expected);
         end
         if (cycles !== 32'(elapsed)) $fatal(1, "cycles=%0d measured=%0d", cycles, elapsed);
+        $fwrite(profile_fd, "%0d,%0d,%032h,%08h,%0d,%0d", g, s, value, prediction, decode_error, elapsed);
+        for (i = 0; i < 17; i = i + 1) $fwrite(profile_fd, ",%0d", state_cycles[i]);
+        $fwrite(profile_fd, "\n");
         held_cycles = cycles;
         if (cycles > maximum_cycles) maximum_cycles = cycles;
         // Stall the result while presenting an input that must not be accepted.
@@ -125,6 +192,13 @@ module tb_decoder;
         total = total + 1;
     endtask
     initial begin
+        profile_fd = $fopen("profile.csv", "w");
+        trace_fd = $fopen("trace.csv", "w");
+        $fwrite(trace_fd, "graph,shot,event,edge,vertex_or_winner,work_or_loser\n");
+        $fwrite(profile_fd, "graph,shot,syndrome,prediction,error,cycles,IDLE,INIT,CHECK,GROW,GROW_ROOTS,GROW_VALUES,GROW_SELECT,GROW_APPLY,RELABEL,ADVANCE,LEAVES,FIND,FIND_VALUES,FIND_OTHER,FIND_APPLY,VERIFY,HOLD\n");
+        // Graph -1 distinguishes protocol diagnostics from the numbered corpus.
+        g = -1;
+        s = -1;
         repeat (2) tick();
         @(negedge clk);
         rst = 0;
@@ -169,6 +243,7 @@ module tb_decoder;
         if (configured || in_ready) $fatal(1, "invalid load did not fail closed");
         one_graph();
         // Append and commit require a preceding begin.
+        check_initiation();
         append(0, 0, 1, 0, 1);
         configuration_command(3, 1);
         check_shot(1, 32'h80000005, 0);
@@ -236,7 +311,10 @@ module tb_decoder;
         one_graph();
         check_shot(1, 32'h80000005, 0);
         if (!parameters_done) $fatal(1, "minimal parameter probe did not finish");
-        if (maximum_cycles <= 65535) $fatal(1, "corpus failed to cross 16-bit cycle boundary");
+        if (!$test$plusargs("profile_only") && maximum_cycles <= 65535)
+            $fatal(1, "corpus failed to cross 16-bit cycle boundary");
+        $fclose(profile_fd);
+        $fclose(trace_fd);
         $display("PASS qec core graphs=%0d checked_shots=%0d maximum_cycles=%0d config recovery stalls abort reset cycles", graphs, total, maximum_cycles);
         $finish;
     end
