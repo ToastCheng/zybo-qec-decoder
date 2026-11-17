@@ -10,6 +10,26 @@ Start with the [quick start](docs/quickstart.md) for setup, building, board load
 and the web interface. The [code walkthrough](docs/code-walkthrough.md) follows
 one request through Python, ARM firmware and RTL.
 
+## Replay demos
+
+Captured from the web interface after real FPGA decodes. Both examples use seed
+`20261107` and an explicitly injected X fault at tick 8. Replay shows the simulated
+Pauli frame and detector bits; the FPGA predicts observable flips. The green
+correction overlay is computed by the host, not returned by the FPGA.
+
+### Z memory · one distance-3 patch
+
+17 physical qubits, three extraction rounds, with the fault on q1.
+
+![Z-memory replay showing active gates, the injected X fault, detector activity and the host correction overlay](docs/images/z-memory-replay.gif)
+
+### Encoded Bell · two distance-3 patches
+
+34 physical qubits, with the fault on q0. The FPGA prediction matches the sampled
+observable flip. The [encoded-example assumptions](qec/examples/README.md) apply.
+
+![Encoded-Bell replay showing two surface-code patches, the logical Bell circuit and detector bits](docs/images/encoded-bell-replay.gif)
+
 ## Workflow and capabilities
 
 The web interface combines a compact paper-style lattice, a logical/input
