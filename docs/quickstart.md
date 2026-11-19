@@ -87,7 +87,6 @@ the UART with another client.
 
 Choose **Surface memory**, **Encoded Bell**, or **Encoded echo** from the circuit
 list. Open **Advanced** to edit the annotated Stim circuit for customization.
-
 Under **Configure**, you can set the depolarization and random seed.
 
 The physical view includes every used qubit. The injection controls are directly
@@ -105,7 +104,6 @@ truth stays on the host and is used to evaluate the returned prediction.
 ### 6. Replay the completed run
 
 Use the bottom bar's play/pause and step buttons, or scrub the circuit tick.
-
 The final tick shows prediction versus true observable mask; bit i means flip
 the interpretation of logical observable i.
 
