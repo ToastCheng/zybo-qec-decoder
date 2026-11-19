@@ -57,7 +57,7 @@ flowchart TB
         bridge["Toggle mailbox bridge: graph load, syndrome and result reads"]
         subgraph core ["Decoder core: one shot at a time"]
             edges["Runtime-loaded graph: endpoints and observable masks"]
-            fsm["Serial FSM: initialize, grow, merge, peel and verify"]
+            fsm["Initialize, grow, merge, peel and verify"]
             state["Cluster labels, parity, work, degree, growth and forest state"]
             mask["Observable-mask XOR accumulator"]
             cycles["Acceptance-to-result cycle counter"]
@@ -86,11 +86,9 @@ shot. The default image supports up to 128 detectors, 512 edges and 32 observabl
 bits. Compatible graphs can be replaced without rebuilding the FPGA image.
 
 The core processes one shot at a time using unweighted union-find growth and forest
-peeling. It scans edges serially through registered FSM stages, then XORs selected
-edge masks into the observable prediction. A valid all-zero syndrome skips the
+peeling. A finite-state machine (FSM) controls the steps, processing edges serially
+and storing intermediate values in registers between clock cycles. Selected edge
+masks are XORed into the observable prediction. A valid all-zero syndrome skips
 work-state initialization and completes in one counted clock; during peeling,
 nonforest and already-removed edges skip the endpoint/work-read stages. The core
-holds its result until the mailbox bridge accepts it. The cycle count excludes
-result-hold stalls, graph loading and transport. See the
-[core performance study](docs/core-performance.md) for RTL measurements and routed
-timing; the optimized core has not yet been verified on the board.
+holds its result until the mailbox bridge accepts it.
