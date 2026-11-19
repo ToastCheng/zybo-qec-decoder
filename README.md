@@ -47,7 +47,20 @@ The web entry point is `python -m qec.surface.web` on port 8765. There are two m
 
 See [accuracy results](docs/benchmark-accuracy.md) and [performance details](docs/benchmark-timing.md); the tables use three-round Z memory at p = 0.001 and 100 MHz.
 
-![UF logical failure probability versus physical noise for d=3 and d=5](docs/images/benchmark-accuracy-uf.png)
+![UF and weighted matching logical failure probability versus physical noise for d=3 and d=5](docs/images/benchmark-accuracy.png)
+
+The four curves in each X/Z panel use software UF and PyMatching. The PL matching
+implementation currently supports only the fixed d=3 Z-memory graph.
+
+Measured on Zybo for d=3 Z memory, p = 0.001, 4,096 paired shots and 100 MHz
+([methods](docs/benchmark-timing.md#on-board-d3-comparison)):
+
+| PL decoder | Mean core latency (µs) | Observed max (µs) |
+| --- | ---: | ---: |
+| UF | 2.072 | 24.57 |
+| Exact matching | 0.851 | 5.12 |
+
+UF RTL latency and modeled service capacity:
 
 | Workload | Mean RTL latency (µs) | p95 (µs) | Modeled capacity (k jobs/s) | Max modeled FIFO wait, 3.3 µs arrivals (µs) |
 | --- | ---: | ---: | ---: | ---: |
