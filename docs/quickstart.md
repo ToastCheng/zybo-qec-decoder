@@ -208,12 +208,6 @@ feedback, and the FPGA does not return physical correction gates.
 
 ![Web interface after a physical FPGA run](images/web-fpga-layout.png)
 
-Captured on November 19, 2026 after a physical FPGA run of Surface memory:
-seed 20261107, no injected faults, prediction 0, observable 0 and 153 core cycles
-(excluding graph uploads and UART). Replay is at the final host-correction
-overlay. **Details** shows the actual FPGA source and run summary; the bottom
-dock contains simulation and replay controls.
-
 ## Alternative: command-line workflow
 
 Run an annotated circuit in software:
