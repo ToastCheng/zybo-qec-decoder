@@ -1,14 +1,16 @@
 # Zybo QEC Decoder
 
-A graph-loadable quantum error-correction decoder for the Digilent Zybo Z7-10
-(`xc7z010clg400-1`). Python compiles detector-annotated Stim Clifford circuits,
-simulates measurement outcomes, and sends detector bits to the FPGA. The FPGA
-predicts which declared logical observables flipped. The host compares that
-prediction with simulation truth and displays the completed shot.
+This is an educational project to run the QEC pipeline on a relatively cheap Zybo
+Z7-10 FPGA board. This project uses Stim to simulate the circuit and pass the detector
+bits to the FPGA board via UART, FPGA runs the decoding and send back the prediction,
+finally comparing the prediction results on the host machine.
+
+The whole process can be control and visualized through a web interface, a simpler
+cli-based interface is also available.
 
 Start with the [quick start](docs/quickstart.md) for setup, building, board loading
-and the web interface. The [code walkthrough](docs/code-walkthrough.md) follows
-one request through Python, ARM firmware and RTL.
+and the web interface. The [code walkthrough](docs/code-walkthrough.md) for more
+implementation details.
 
 ## Replay demos
 
