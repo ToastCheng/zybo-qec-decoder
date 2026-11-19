@@ -2,7 +2,7 @@
 
 A standalone QEC decoder project for the **Digilent Zybo Z7-10**
 (`xc7z010clg400-1`), with Stim-generated inputs, FPGA decoding, and host-side
-verification. This repository uses **`main`**.
+verification.
 
 ## Prerequisites
 
@@ -34,26 +34,9 @@ and AMD cable drivers for the Zybo Z7-10. The build uses board part
 directory if it is outside Vivado's board search paths.
 
 Connect the powered board through its PROG/UART USB port and grant your account
-serial-device access. For software-only use, the Python setup is sufficient.
+serial-device access.
 
-## Quick start: configure, run and replay in the web interface
-
-The decoder accepts detector-annotated Clifford circuits with different
-physical-qubit counts, gates, checks and logical observables. The web editor takes
-Stim text; the host compiles its decoding graph and uploads that graph to the
-FPGA. Changing a compatible circuit does not require rebuilding the bitstream.
-
-The current Z7-10 image has capacity for **128 detectors, 512 graph edges and
-32 observable bits**, at 100 MHz. Physical-qubit count is independent of detector
-count; the host parser separately bounds it for resource safety. The decoder is
-unweighted union-find/peeling. Non-graphlike fault components, ambiguous observable
-labels and detectorless logical faults are rejected rather than silently dropped.
-
-The graph-loadable image has passed RTL regressions, routed timing, an ARM firmware
-build and physical FPGA checks across six different circuit graphs without
-reprogramming between graphs. See [verification evidence](verification.md).
-The verification record separates the archived image from checks of the
-reorganized sources and unified interface.
+## Quick start
 
 ### 1. Build the bitstream and firmware
 
@@ -69,12 +52,6 @@ ARM firmware against the exported XSA. With the directory above, outputs are:
 - `build/image/qec_soc.xsa`
 - `build/image/vitis_ws/qec_app/build/qec_app.elf`
 
-`IMAGE_DIR` defaults to the repository's `build/image`. Choose a fresh directory
-for each build, and pass the same value to build, firmware and load. Tool working
-directories stay under `build/tools/`; command logs stay under `build/logs/`.
-Review routed timing, utilization and DRC reports
-before loading an image. Skip steps 1–2 for software-only use.
-
 ### 2. Load the board
 
 Close serial monitors and serial-backed web servers, then find the UART port:
@@ -87,9 +64,9 @@ make load IMAGE_DIR=build/image
 
 `make load` loads the matching bitstream, ELF and XSA over JTAG. It programs
 volatile PL state and restarts ARM core 0; it does not write boot flash.
-Check the load log for successful programming and ARM startup. The four user
-LEDs show mailbox ACK, decode-complete, operation error and returned-data bit 0;
-none is a logical-success light. See the [LED map](decoder-design.md#board-leds).
+The four user LEDs show mailbox ACK, decode-complete, operation error and
+returned-data bit 0; none is a logical-success light. See the
+[LED map](decoder-design.md#board-leds).
 
 ### 3. Open the web interface
 
@@ -99,32 +76,17 @@ python -m qec.surface.web --port 8765 --serial-port "$PORT"
 
 Open **http://127.0.0.1:8765/**. After a completed run, open **Details** to check
 that the decoder source is **FPGA**. For software-only use, omit
-`--serial-port "$PORT"`; the completed run reports **Software**, and Python runs
-the same unweighted graph algorithm. FPGA errors never fall back to software.
+`--serial-port "$PORT"`, the decoding will be handled by the host's pymatching
+implementation instead.
 
 The server binds only to loopback. Opening the page does not query, program or
 reset the board. No frontend build is needed. Stop it with Ctrl+C before using
 the UART with another client.
 
-For a public Cloudflare Tunnel at `https://qec.toastcheng.com`, launch with:
-
-```sh
-python -m qec.surface.web --port 8765 --serial-port "$PORT" --public-origin https://qec.toastcheng.com
-```
-
-Point the tunnel at `http://localhost:8765` and preserve the incoming Host header.
-The option permits only that exact HTTPS origin in addition to localhost; other
-hosts and cross-origin requests remain rejected. The server still binds to
-loopback. Without this option it accepts only local access. This is not
-authentication: public visitors can run simulations and submit experiments to the
-connected FPGA. Only one experiment runs at a time.
-
 ### 4. Define the circuit, noise and seed
 
 Choose **Surface memory**, **Encoded Bell**, or **Encoded echo** from the circuit
-list. Open **Advanced** to edit the annotated Stim circuit. Seed and noise controls
-are in **Configure**, collapsed by default. Editing the text changes the selection to Custom and
-invalidates the completed result without running anything.
+list. Open **Advanced** to edit the annotated Stim circuit for customization.
 
 The [Bell example](../qec/examples/phase_bell.stim) uses two distance-3 patches
 (34 physical qubits). The [echo example](../qec/examples/two_repetition_echo.stim)
