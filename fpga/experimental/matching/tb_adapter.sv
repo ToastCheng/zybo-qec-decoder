@@ -62,7 +62,7 @@ module tb_adapter;
                 tick(); elapsed = elapsed + 1;
                 if (elapsed > 10000) $fatal(1, "timeout");
             end
-            if (prediction != expected || cycles != elapsed || cycles != 9826 || decode_error)
+            if (prediction != expected || dut.exact_cost != cost || cycles != elapsed || cycles > 1000 || (shot == 0 && cycles != 1) || decode_error)
                 $fatal(1, "result/counter mismatch %0d", i);
             repeat(3) begin
                 tick();
@@ -81,7 +81,7 @@ module tb_adapter;
         syndrome = 0; in_valid = 1; tick();
         @(negedge clk); in_valid = 0;
         while (!out_valid) tick();
-        if (prediction || cycles != 9826) $fatal(1, "post-abort decode");
+        if (prediction || cycles != 1) $fatal(1, "post-abort decode");
         $display("PASS adapter: 1050 complete shots, independent counter, poisoned load recovery, abort, held results");
         $finish;
     end

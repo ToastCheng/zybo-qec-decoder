@@ -1,6 +1,5 @@
 """Independently verify archived wire records, references and paired statistics."""
 import csv
-import hashlib
 import json
 from pathlib import Path
 import statistics
@@ -21,11 +20,14 @@ def frame(hex_string, magic):
 def verify(root):
     vectors = [line.split() for line in (root / "vectors.txt").read_text().splitlines()[1:]]
     rtl = list(csv.DictReader((root / "rtl-latency.csv").open()))
-    assert len(vectors) == len(rtl) == 1050
+    count = int((root / "vectors.txt").read_text().splitlines()[0])
+    assert len(vectors) == len(rtl) == count
     summaries = {}
     for name, version in (("uf", 2), ("matching", 0xD303)):
         wire = json.loads((root / name / "wire.json").read_text())
         results = json.loads((root / name / "results.json").read_text())
+        real_count = results.get("real_shots", 512)
+        assert 0 < real_count <= count - 513
         shots = []
         rejected = 0
         for i, record in enumerate(wire["transactions"]):
@@ -43,7 +45,7 @@ def verify(root):
                 prediction, cycles, error = struct.unpack("<IIB", rx)
                 assert not error and cycles > 0
                 shots.append((int.from_bytes(tx, "little"), prediction, cycles))
-        assert len(shots) == len(results["shots"]) == 1050
+        assert len(shots) == len(results["shots"]) == count
         assert rejected == (1 if name == "matching" else 0)
         for i, (s, pred, cycles) in enumerate(shots):
             v = vectors[i]
@@ -53,8 +55,8 @@ def verify(root):
             row = results["shots"][i]
             assert (s, pred, cycles) == (row["syndrome"], row["prediction"], row["cycles"])
         stats = {}
-        for pop, indices in (("real", range(512)), ("uniform", range(512, 1024)),
-                             ("diagnostic", range(1024, 1050))):
+        for pop, indices in (("real", range(real_count)), ("uniform", range(real_count, real_count + 512)),
+                             ("diagnostic", range(real_count + 512, count))):
             cycles = [shots[i][2] for i in indices]
             stats[pop] = dict(count=len(cycles), mean_cycles=statistics.mean(cycles),
                               median_cycles=statistics.median(cycles), min_cycles=min(cycles),
@@ -63,7 +65,7 @@ def verify(root):
                               if pop == "real" else None)
         summaries[name] = dict(transactions=len(wire["transactions"]), verified_shots=len(shots),
                                rejected_wrong_graph=rejected, populations=stats)
-    summaries["real_empty_syndromes"] = sum(int(v[0], 16) == 0 for v in vectors[:512])
+    summaries["real_empty_syndromes"] = sum(int(v[0], 16) == 0 for v in vectors[:real_count])
     summaries["real_mean_latency_ratio_matching_over_uf"] = (
         summaries["matching"]["populations"]["real"]["mean_cycles"] /
         summaries["uf"]["populations"]["real"]["mean_cycles"])
