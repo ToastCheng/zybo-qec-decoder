@@ -15,17 +15,17 @@ these commands from the repository root:
 uv venv --python 3.12 qec/.venv
 uv pip install --python qec/.venv/bin/python -r qec/requirements.txt
 source qec/.venv/bin/activate
-mkdir -p build
 ```
 
 ### AMD toolchain and board
 
-For FPGA decoding and optional RTL simulation, install Vivado/Vitis 2025.2 with
-Zynq-7000 support using the [AMD installation guide](https://docs.amd.com/r/2025.2-English/ug1742-vitis-release-notes/Installing-the-Vitis-Software-Platform).
-Add their bin directories to PATH, adjusting the installation paths below:
+Install Vivado/Vitis with Zynq-7000 support using the
+[AMD installation guide](https://docs.amd.com/r/2025.2-English/ug1742-vitis-release-notes/Installing-the-Vitis-Software-Platform).
+This example uses version 2025.2. Replace `/path/to` below with your installation
+paths:
 
 ```sh
-export PATH="$HOME/amd/2025.2/Vivado/bin:$HOME/amd/2025.2/Vitis/bin:$PATH"
+export PATH="/path/to/Vivado/bin:/path/to/Vitis/bin:$PATH"
 ```
 
 Install the [Digilent board files](https://digilent.com/reference/programmable-logic/guides/install-board-files)
