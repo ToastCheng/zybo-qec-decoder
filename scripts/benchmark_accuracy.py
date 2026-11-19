@@ -62,7 +62,7 @@ def plot_results(rows, output, *, include_mwpm=True):
                 high = np.array([r["ci_high"] for r in points])
                 positive = y > 0
                 ax.plot(x, np.where(positive, y, np.nan), style, color=colors[distance],
-                        marker=marker, markersize=4, label=f"{'Matching' if decoder == 'MWPM' else decoder} d={distance}" if include_mwpm else f"d={distance}")
+                        marker=marker, markersize=4, label=f"d={distance} {decoder}" if include_mwpm else f"d={distance}")
                 ax.errorbar(x[positive], y[positive],
                             yerr=[y[positive] - low[positive], high[positive] - y[positive]],
                             fmt="none", ecolor=colors[distance], capsize=2, alpha=.65)
@@ -94,7 +94,7 @@ def main():
     parser.add_argument("--seed", type=int, default=20261119)
     parser.add_argument("--p", type=float, nargs="+", default=[.001, .002, .004, .008, .016, .032])
     parser.add_argument("--png", type=Path, help="Optional maintained PNG destination")
-    parser.add_argument("--readme-png", type=Path, help="Optional four-curve UF/matching README PNG destination")
+    parser.add_argument("--readme-png", type=Path, help="Optional UF-only README PNG destination")
     args = parser.parse_args()
     if args.shots < 1 or args.batch_size < 1 or args.seed < 0 or args.seed >= 2**64 - 24:
         parser.error("invalid shots, batch size or seed")
@@ -192,7 +192,7 @@ def main():
     if args.readme_png:
         readme_output = output / "readme"
         readme_output.mkdir()
-        plot_results(rows, readme_output)
+        plot_results(rows, readme_output, include_mwpm=False)
         args.readme_png.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(readme_output / "benchmark-accuracy.png", args.readme_png)
     metadata["elapsed_seconds"] = time.perf_counter() - start

@@ -2,11 +2,7 @@
 
 ![Logical failure probability for rotated X and Z memories](images/benchmark-accuracy.png)
 
-Each X/Z panel has four curves: matching d=3, matching d=5, UF d=3 and UF d=5.
-Matching uses weighted PyMatching; UF uses the maintained ordered, unweighted
-reference. These are software accuracy sweeps, not FPGA latency measurements.
-The current PL matching implementation supports only the fixed d=3 Z-memory
-graph, so the d=5 matching curve is a software reference.
+This is a software experiment using the maintained ordered, unweighted union-find (UF) reference and weighted PyMatching. It does not measure FPGA execution, latency, or adaptive feedback.
 
 ## Method
 
@@ -32,21 +28,6 @@ At p = 0.004, the counts below are failures out of 30,000:
 | Z | 5 | 403 | 141 |
 
 The lowest-noise d=5 points have sparse matching failures: X has 2 and Z has 0. For Z, zero observed failures gives a 95% interval of [0, 0.0001229551], not evidence of zero logical error probability. The intermediate points provide substantially more failures for comparison. Increasing distance does not consistently improve this ordered UF implementation across the sampled grid.
-
-## Separate d3 board comparison
-
-The [optimized matching board study](https://github.com/ToastCheng/qc-research/blob/feat/fpga-qec/fpga-qec/matching-optimization/REPORT.md)
-uses the same d=3/r=3 Z-memory noise model at p=0.001. Its separate 100,000-shot
-sample has 70 matching failures (0.070%) and 101 UF failures (0.101%). Every one
-of its 1,069 distinct syndromes was physically decoded on both cores and mapped
-back to the saved per-shot observable truth; this was not 100,000 separate board
-transactions. The directly timed 4,096-shot subset had three failures per decoder.
-
-That study keeps matching weights fixed at p=0.001. The curves above instead
-regenerate PyMatching weights at every p and use 30,000 shots per point. Their
-archived counts are unchanged; the new board-study point is not spliced into
-these curves. See [core latency](benchmark-timing.md#on-board-d3-comparison)
-for the measured comparison.
 
 ## Reproduce
 

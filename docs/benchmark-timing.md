@@ -1,6 +1,6 @@
 # Decoder performance
 
-The UF tables use RTL latency, modeled service capacity/FIFO waiting time, and an archived full-SoC route at 100 MHz. The separate d3 comparison below reports measured board execution of UF and optimized exact matching. Neither study establishes continuous-QEC operation.
+These tables describe the current decoder at 100 MHz: latency comes from RTL simulation, capacity and FIFO waiting time are modeled from measured cycles, and resource counts come from an archived full-SoC route. They are not new board measurements or continuous-QEC validation.
 
 ## Latency and service capacity
 
@@ -42,42 +42,7 @@ The full SoC targets `xc7z010clg400-1` at 100 MHz, with capacity for 128 detecto
 | Setup WNS (ns) | +0.190 |
 | Hold WHS (ns) | +0.042 |
 
-These are full-SoC totals, not per-distance or core-only estimates. The simulated core is byte-identical to the archived routed core. Timing closure at this clock does not establish Fmax or board latency. That UF route predates the matching board comparison below.
-
-## On-board d3 comparison
-
-Both complete decoders ran in PL on Zybo Z7-10 at 100 MHz, using the same
-4,096 real d=3/r=3 Z-memory shots at p=0.001. All four Stim noise parameters
-were set to p.
-
-| PL decoder | Mean core latency (µs) | Median (µs) | Observed max (µs) |
-| --- | ---: | ---: | ---: |
-| Maintained UF | 2.072122 | 0.01 | 24.57 |
-| Optimized exact matching | 0.850854 | 0.01 | 5.12 |
-
-Matching takes 512 cycles for every nonempty syndrome and one cycle for zero.
-There were 3,422 empty real syndromes. Its parallel frontier preserves the exact
-weighted objective and deterministic ties; the nonempty serial baseline took
-9,826 cycles. The optimization trades area for latency: the matching full SoC
-uses 11,981 LUTs, 8,126 flip-flops and one BRAM36-equivalent tile, with routed
-setup/hold slack +0.027/+0.032 ns and zero DRC findings.
-
-Matching remains fixed to the 24-detector/78-edge/one-observable graph and its
-p=0.001 weights. There is no d=5 PL matching implementation or measured d=5
-matching latency. The d=5 matching accuracy curve is the software PyMatching
-reference; it cannot be used to infer hardware timing or resource use.
-
-Cycle counts cover complete-syndrome acceptance through final observable
-availability, excluding UART, ARM transport, graph upload and retirement stalls.
-The independent adapter counter and RTL edge counter agree with every board
-reply. In total, each core decoded 5,703 vectors, including stress/diagnostic and
-accuracy-coverage patterns; only the 4,096 real shots enter the table. Sustained
-service capacity and backlog were not measured for matching.
-
-[Board report and raw evidence](https://github.com/ToastCheng/qc-research/blob/feat/fpga-qec/fpga-qec/matching-optimization/REPORT.md)
-include all 11,406 successful decode replies, paired accuracy, bit/XSA/ELF hashes,
-route reports and restoration checks. The compatible UF image and public server
-were restored after the experiment; no flash writes were performed.
+These are full-SoC totals, not per-distance or core-only estimates. The simulated core is byte-identical to the archived routed core. Timing closure at this clock does not establish Fmax or board latency. No new route or board programming was performed.
 
 ## Methods and evidence
 
