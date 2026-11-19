@@ -97,9 +97,10 @@ none is a logical-success light. See the [LED map](decoder-design.md#board-leds)
 python -m qec.surface.web --port 8765 --serial-port "$PORT"
 ```
 
-Open **http://127.0.0.1:8765/**. The source label is **FPGA**. For software-only
-use, omit `--serial-port "$PORT"`; the label is **Software**, and Python runs the
-same unweighted graph algorithm. FPGA errors never fall back to software.
+Open **http://127.0.0.1:8765/**. After a completed run, open **Details** to check
+that the decoder source is **FPGA**. For software-only use, omit
+`--serial-port "$PORT"`; the completed run reports **Software**, and Python runs
+the same unweighted graph algorithm. FPGA errors never fall back to software.
 
 The server binds only to loopback. Opening the page does not query, program or
 reset the board. No frontend build is needed. Stop it with Ctrl+C before using
@@ -207,9 +208,11 @@ feedback, and the FPGA does not return physical correction gates.
 
 ![Web interface after a physical FPGA run](images/web-fpga-layout.png)
 
-Captured from the unified interface using the FPGA: seed 20261107, prediction 0,
-observable 0 and 761 core cycles. The physical layout and logical-memory diagram
-are visible together.
+Captured on November 19, 2026 after a physical FPGA run of Surface memory:
+seed 20261107, no injected faults, prediction 0, observable 0 and 153 core cycles
+(excluding graph uploads and UART). Replay is at the final host-correction
+overlay. **Details** shows the actual FPGA source and run summary; the bottom
+dock contains simulation and replay controls.
 
 ## Alternative: command-line workflow
 
