@@ -1,8 +1,27 @@
 # Logical accuracy benchmark
 
-![Logical failure probability for rotated X and Z memories](images/benchmark-accuracy.png)
+![Zybo Z7-10 FPGA logical failure probability for rotated X and Z memories](images/benchmark-accuracy-fpga.png)
 
-This is a software experiment using the maintained ordered, unweighted union-find (UF) reference and weighted PyMatching. It does not measure FPGA execution, latency, or adaptive feedback.
+All four curves in each X/Z panel (`Matching d=3`, `Matching d=5`, `UF d=3`, `UF d=5`) come from real Zybo Z7-10 programmable-logic execution at 100 MHz: the maintained runtime-UF image and the programmable parity-frontier exact matching image (`fpga/experimental/frontier/`) each decoded every distinct syndrome across all 24 circuit/noise points over UART (`93,500` verified decode replies total). Stim samples noisy circuits and observable truth on the host; PyMatching is used only offline to extract exact binary64 edge weights for the uploaded parity-DP programs.
+
+## On-board 4-curve FPGA results
+
+The board sweep covers `p = 0.001, 0.002, 0.004, 0.008, 0.016, 0.032` for rotated X and Z memories at distances 3 (`8,000` shared shots/point) and 5 (`1,500` shared shots/point), three extraction rounds, seeds `20261120..20261143`. Across the 24 points there are `114,000` shared simulated shots and `46,750` unique detector syndromes; both PL images decoded all `46,750` unique syndromes with zero hardware errors, exact IEEE CRC32 program readback on matching, and 100% prediction agreement with independent exact references. Because both PL decoders are deterministic functions of the loaded graph/program and syndrome, mapping verified board predictions onto the `114,000` truth-labeled shots is exact; raw transaction count (`93,500` decode replies, `94,052` total UART transactions) is reported separately rather than called `228,000` physical transactions.
+
+Failures at `p = 0.004` (`8,000` shots for `d=3`, `1,500` shots for `d=5`):
+
+| Memory | Distance | UF on FPGA | Exact matching on FPGA |
+| --- | ---: | ---: | ---: |
+| X | 3 | 133 / 8,000 (1.66%) | 119 / 8,000 (1.49%) |
+| X | 5 | 23 / 1,500 (1.53%) | 8 / 1,500 (0.53%) |
+| Z | 3 | 111 / 8,000 (1.39%) | 84 / 8,000 (1.05%) |
+| Z | 5 | 21 / 1,500 (1.40%) | 7 / 1,500 (0.47%) |
+
+Full raw board results, schedules, route reports and wire archives are in [fpga-four-curve-benchmark](https://github.com/ToastCheng/qc-research/tree/feat/fpga-qec/fpga-qec/fpga-four-curve-benchmark).
+
+## Earlier 30,000-shot software reference archive
+
+The section below documents the earlier software-only sweep (`images/benchmark-accuracy.png`) preserved for historical reproducibility.
 
 ## Method
 

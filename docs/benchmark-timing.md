@@ -1,6 +1,6 @@
 # Decoder performance
 
-These tables describe the current decoder at 100 MHz: latency comes from RTL simulation, capacity and FIFO waiting time are modeled from measured cycles, and resource counts come from an archived full-SoC route. They are not new board measurements or continuous-QEC validation.
+The first three sections report the maintained UF RTL sweep, modeled FIFO backlog and full-SoC route at 100 MHz; the fourth section reports actual Zybo Z7-10 on-board PL latency across `d=3` and `d=5` for both UF and exact weighted matching. Neither establishes continuous-QEC feedforward.
 
 ## Latency and service capacity
 
@@ -43,6 +43,22 @@ The full SoC targets `xc7z010clg400-1` at 100 MHz, with capacity for 128 detecto
 | Hold WHS (ns) | +0.042 |
 
 These are full-SoC totals, not per-distance or core-only estimates. The simulated core is byte-identical to the archived routed core. Timing closure at this clock does not establish Fmax or board latency. No new route or board programming was performed.
+
+## On-board d3 and d5 comparison
+
+All measurements below were captured over UART from complete PL execution on the connected Zybo Z7-10 at 100 MHz (`10 ns` per cycle), three extraction rounds, `p = 0.001`:
+
+| PL image | Workload | Shots | Mean core latency (µs) | Nonempty / observed max (µs) | Routed LUT / FF / BRAM36 | Setup / hold slack (ns) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Maintained runtime UF (`128/512/32`) | d3 X / d3 Z | 8,000 / 8,000 | 1.985 / 1.944 | 24.68 / 24.43 | 9,048 / 3,195 / 1.5 | +0.190 / +0.042 |
+| Maintained runtime UF (`128/512/32`) | d5 X / d5 Z | 1,500 / 1,500 | 15.735 / 18.520 | 103.11 / 130.22 | 9,048 / 3,195 / 1.5 | +0.190 / +0.042 |
+| Programmable exact matching (`fpga/experimental/frontier/`, 4-lane BRAM, width ≤ 12) | d3 X / d3 Z | 8,000 / 8,000 | 8.344 / 7.999 | 51.10 / 51.10 | 3,090 / 3,247 / 18 | +0.954 / +0.028 |
+| Programmable exact matching (`fpga/experimental/frontier/`, 4-lane BRAM, width ≤ 12) | d5 X / d5 Z | 1,500 / 1,500 | 4,104.73 / 4,513.77 | 10,764.14 / 10,764.14 | 3,090 / 3,247 / 18 | +0.954 / +0.028 |
+| Fixed-d3 exact matching (`fpga/experimental/matching/`, 32-lane FF, width 5) | d3 Z | 4,096 | 0.851 | 5.12 | 11,981 / 8,126 / 1 | +0.027 / +0.032 |
+
+Both exact matching images solve the full nonnegative minimum-weight T-join objective in PL with lossless binary64-derived integer weights, explicit infinity saturation, zero-syndrome 1-cycle fast path, and an independent PL cycle counter checked on every shot. For `d=3` (width 5, 32 states, 102 operations), unrolling all 32 states in flip-flops (`fpga/experimental/matching/`) reaches `512` nonempty cycles (`5.12 µs`) and `0.851 µs` mean latency—faster than UF—using 68% of Zybo LUTs. Scaling exact parity-frontier DP to `d=5` (72 detectors, 278 edges, 350 operations, beam-found width 11 = `2,048` states) fits comfortably in Zybo BRAM (`18` BRAM36 tiles, `3,090` LUTs, zero DRC findings) via the 4-lane programmable engine (`fpga/experimental/frontier/`), taking `5,110` nonempty cycles on `d=3` and `1,076,414` nonempty cycles (`10.76 ms`) on `d=5` because frontier cost grows as `2^width`.
+
+Evidence: [fpga-four-curve-benchmark](https://github.com/ToastCheng/qc-research/tree/feat/fpga-qec/fpga-qec/fpga-four-curve-benchmark) and [matching-optimization](https://github.com/ToastCheng/qc-research/blob/feat/fpga-qec/fpga-qec/matching-optimization/REPORT.md). Compatible runtime UF and the public web server were restored and verified after capture; no flash writes were performed.
 
 ## Methods and evidence
 

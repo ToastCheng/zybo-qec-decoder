@@ -47,7 +47,22 @@ The web entry point is `python -m qec.surface.web` on port 8765. There are two m
 
 See [accuracy results](docs/benchmark-accuracy.md) and [performance details](docs/benchmark-timing.md); the tables use three-round Z memory at p = 0.001 and 100 MHz.
 
-![UF logical failure probability versus physical noise for d=3 and d=5](docs/images/benchmark-accuracy-uf.png)
+![Zybo Z7-10 FPGA logical failure probability for exact matching and UF at d=3 and d=5](docs/images/benchmark-accuracy-fpga.png)
+
+All four curves in each X/Z panel were decoded on the Zybo Z7-10 in programmable
+logic at 100 MHz (93,500 verified UART decode replies across 46,750 unique
+syndromes; no software decoder stand-ins). Measured on-board Z-memory core
+latency at p = 0.001 ([details](docs/benchmark-timing.md#on-board-d3-and-d5-comparison)):
+
+| PL decoder / workload | Mean core latency (µs) | Nonempty / max (µs) | Full-SoC LUT / FF / BRAM36 |
+| --- | ---: | ---: | ---: |
+| UF, d3 Z | 1.94 | 24.43 | 9,048 / 3,195 / 1.5 |
+| UF, d5 Z | 18.52 | 130.22 | 9,048 / 3,195 / 1.5 |
+| Exact matching (programmable d3/d5, 4-lane BRAM), d3 Z | 8.00 | 51.10 | 3,090 / 3,247 / 18 |
+| Exact matching (programmable d3/d5, 4-lane BRAM), d5 Z | 4,513.77 | 10,764.14 | 3,090 / 3,247 / 18 |
+| Exact matching (fixed d3 Z, 32-lane FF), d3 Z | 0.85 | 5.12 | 11,981 / 8,126 / 1 |
+
+UF RTL latency and modeled service capacity:
 
 | Workload | Mean RTL latency (µs) | p95 (µs) | Modeled capacity (k jobs/s) | Max modeled FIFO wait, 3.3 µs arrivals (µs) |
 | --- | ---: | ---: | ---: | ---: |
