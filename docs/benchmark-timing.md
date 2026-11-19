@@ -65,7 +65,7 @@ No new route, bitstream load, firmware load, UART transaction or board programmi
 
 ## Evidence and reproduction
 
-Final raw evidence on the research workstation:
+[Final raw evidence](https://github.com/ToastCheng/qc-research/tree/feat/fpga-qec/fpga-qec/readme-benchmarks/timing/sweep-20261119-final) is archived in the research repository; its local path is:
 
 ```text
 /home/toastcheng/qc-research/fpga-qec/readme-benchmarks/timing/sweep-20261119-final/

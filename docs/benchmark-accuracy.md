@@ -43,7 +43,7 @@ PYTHONPYCACHEPREFIX=build/accuracy/cache build/accuracy/venv/bin/python scripts/
 
 The output directory must not exist. Defaults reproduce the grid, seed 20261119, and batch sizes above. Seeds increment by point in X/Z, distance, then ascending p order. Stim reproducibility depends on its version, machine/SIMD behavior, batch size, and call sequence, not the seed alone.
 
-Captured evidence is outside this repository at:
+[Captured evidence and raw data](https://github.com/ToastCheng/qc-research/tree/feat/fpga-qec/fpga-qec/readme-benchmarks/accuracy/run-20261119) are archived in the research repository; the local path used for this run is:
 
 ```text
 /home/toastcheng/qc-research/fpga-qec/readme-benchmarks/accuracy/run-20261119/

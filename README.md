@@ -43,6 +43,18 @@ The web entry point is `python -m qec.surface.web` on port 8765. There are two m
 - Software mode (default) runs the Python reference decoder.
 - FPGA mode (with `--serial-port /dev/ttyUSBx`) uses the FPGA decoder.
 
+## Benchmarks
+
+[Accuracy](docs/benchmark-accuracy.md), [RTL latency, modeled throughput/backlog and routed resource cost](docs/benchmark-timing.md) are shown below.
+
+![Logical failure probability versus physical noise](docs/images/benchmark-accuracy.png)
+
+![RTL decoding latency versus physical noise](docs/images/benchmark-latency.png)
+
+![Modeled service capacity and backlog](docs/images/benchmark-backlog.png)
+
+![Routed FPGA resource cost](docs/images/benchmark-resources.png)
+
 ## FPGA architecture
 
 ```mermaid
