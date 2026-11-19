@@ -5,12 +5,10 @@ Z7-10 FPGA board. This project uses Stim to simulate the circuit and pass the de
 bits to the FPGA board via UART, FPGA runs the decoding and send back the prediction,
 finally comparing the prediction results on the host machine.
 
-The whole process can be control and visualized through a web interface, a simpler
-cli-based interface is also available.
-
-Start with the [quick start](docs/quickstart.md) for setup, building, board loading
-and the web interface. The [code walkthrough](docs/code-walkthrough.md) for more
-implementation details.
+The whole process can be controlled and visualized through a web interface, a simpler
+cli-based interface is also available. Start with the [quick start](docs/quickstart.md)
+for setup, building, board loading and the web interface. The
+[code walkthrough](docs/code-walkthrough.md) for more implementation details.
 
 ## Replay demos
 
@@ -34,27 +32,13 @@ observable flip. The [encoded-example assumptions](qec/examples/README.md) apply
 
 ## Workflow and capabilities
 
-The web interface combines a compact paper-style lattice, a logical/input
-circuit view, a physical-qubit grid and a scrub-able timeline. Use a known
-surface-memory preset or submit an annotated physical circuit. Run compiles the
-graph and simulates and decodes a shot; Replay uses the completed trace without
-contacting the decoder. The single web entry point is `python -m qec.surface.web`
-on port 8765. Software mode runs the Python reference; FPGA mode requires the
-matching loaded image and a serial port, and never substitutes software on error.
+The web interface uses a known surface-memory preset or submit an annotated
+physical circuit. Run compiles the graph and simulates and decodes a shot;
+Replay uses the completed trace without contacting the decoder.
 
-The checked-in Bell and echo examples use two and six distance-3 surface-code
-patches (34 and 102 physical qubits). They are fixed encoded experiments under
-an explicit storage/readout noise model with ideal gates and exact gate-boundary
-check results. Their logical diagrams come from tested generated mappings;
-this is not an arbitrary logical-to-QEC compiler. See the
-[example assumptions](qec/examples/README.md), including the ordinary-Bell/no-S
-adaptation and nonlocal transversal-CX coupling assumption.
-
-The accepted hardware design supports up to **128 detectors, 512 graph edges and
-32 observable bits at 100 MHz**. These are decoder capacities, not a physical-qubit
-limit. Compatible graph changes upload through the existing image without another
-bitstream build. The compiler checks graph dimensions and rejects unsupported
-fault signatures rather than dropping them.
+The web entry point is `python -m qec.surface.web` on port 8765. There are two modes:
+- Software mode (default) runs the Python reference decoder
+- FPGA mode (with `--serial-port /dev/ttyUSBx` argument) used the FPGA decoder
 
 ## FPGA architecture
 
