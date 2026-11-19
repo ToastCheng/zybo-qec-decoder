@@ -30,11 +30,13 @@ observable flip. The [encoded-example assumptions](qec/examples/README.md) apply
 
 ![Encoded-Bell replay showing two surface-code patches, the logical Bell circuit and detector bits](docs/images/encoded-bell-replay.gif)
 
-## Workflow and capabilities
+## Workflow
 
-The web interface uses a known surface-memory preset or submit an annotated
-physical circuit. Run compiles the graph and simulates and decodes a shot;
-Replay uses the completed trace without contacting the decoder.
+1. The web interface provides a list of circuit preset, you can either chose one of
+them or provide an customized physical circuit.
+2. Configure the error rates and inject errors.
+3. Compile the circuit, simulate and run the decoder by pressing "Simulate and decode".
+4. Replay the simulation using the bottom timeline UI.
 
 The web entry point is `python -m qec.surface.web` on port 8765. There are two modes:
 - Software mode (default) runs the Python reference decoder
@@ -73,33 +75,6 @@ flowchart LR
     arm <-->|"AXI GP0"| gpio
 ```
 
-ARM handles transport and mailbox access; PL performs the decode. The core
+PS handles transport and mailbox access; PL performs the decode. The core
 processes one shot at a time using unweighted union-find growth and forest
-peeling. Registered stages scan graph edges serially; the diagram does not imply
-one parallel decoder per qubit or edge. Core cycles exclude serial transport,
-graph loading and time waiting for the host to consume the result.
-
-## Scope and evidence
-
-Inputs must include the physical preparation, checks, detector annotations and
-observable definitions. A logical view is meaningful for a known memory preset
-or an explicitly supplied logical description/mapping. Supplying a logical
-circuit does not prove its correspondence to the physical circuit. This project
-does not automatically synthesize arbitrary logical programs into fault-tolerant
-implementations.
-
-The FPGA returns an observable-flip mask, not physical correction gates. Host
-visualizations and counterfactual correction overlays are not FPGA outputs.
-Completed simulated windows do not demonstrate live quantum acquisition or
-adaptive quantum feedback. Unweighted decoding can disagree with weighted
-matching and can fail against simulated logical truth.
-
-The [verification record](docs/verification.md) links archived routed reports and
-physical-board captures. The accepted image decoded six different graphs without
-reprogramming: 1,019 predictions matched the Python reference, including 768
-sampled shots. Those finite samples do not establish a zero logical-error rate.
-The reorganized build and unified interface also passed separate physical-board
-checks, recorded alongside the archived results.
-
-See the [decoder design](docs/decoder-design.md) for the graph and transport
-contract, and [editable examples](qec/examples/README.md) for annotated Stim inputs.
+peeling.
