@@ -83,90 +83,31 @@ The server binds only to loopback. Opening the page does not query, program or
 reset the board. No frontend build is needed. Stop it with Ctrl+C before using
 the UART with another client.
 
-### 4. Define the circuit, noise and seed
+### 4. Define the circuit
 
 Choose **Surface memory**, **Encoded Bell**, or **Encoded echo** from the circuit
 list. Open **Advanced** to edit the annotated Stim circuit for customization.
 
-The [Bell example](../qec/examples/phase_bell.stim) uses two distance-3 patches
-(34 physical qubits). The [echo example](../qec/examples/two_repetition_echo.stim)
-uses six patches (102 physical qubits). Each patch has nine data qubits and eight
-measurement ancillas, with three check rounds per protected segment. Their
-logical-to-physical descriptions come from the tested generator, not a separate
-user-supplied diagram.
+Under **Configure**, you can set the depolarization and random seed.
 
-**Agent-selected adaptations:** Bell now measures ordinary XX/ZZ correlations,
-not the former phase-Bell YX/ZZ correlations; no encoded S gadget is claimed.
-The echo omits its canceling S/S_DAG pair and checks all six logical outputs.
-Interpatch CX is transversal and assumes nonlocal pairwise couplers, not lattice
-surgery. These are fixed encoded experiments, not an arbitrary logical compiler.
-
-The runnable examples use explicitly restricted independent X/Z storage noise
-and measurement-result flips. Gates/resets and the last check results before
-logical gates are perfect. Full circuit-level gate noise remains unsupported;
-its correlations are rejected, not discarded. See the [exact noise model and
-validation](../qec/examples/README.md).
-
-Keep **Added gate depolarization** at 0 for the encoded presets: adding gate
-faults can produce unsupported correlations. For compatible custom circuits the
-accepted rate is 0–0.75. Existing noise in the text is retained. Added noise
-follows each one/two-qubit unitary group; other
-unitary Pauli-product operations receive single-qubit depolarization on their
-support. It does not add measurement or reset noise; specify those in the circuit.
-A rate of 0 disables only the added noise, not noise already present in the text.
-
-For a zero-noise experiment with an empty decoding graph, use **Reference Stim
-(optional)** to supply the same annotated experiment with noise.
-The compiler checks compatibility and never invents reference noise.
-
-Checks and observables must be deterministic without noise. Bare Clifford gates
-do not define a QEC experiment: supply its encoding, checks and readout. This
-frontend accepts annotated physical circuits; it does not automatically synthesize
-an arbitrary logical program into a fault-tolerant implementation. Measurement
-feedback and sweep-controlled operations are currently rejected.
-
-For custom input, **Advanced** contains an optional logical diagram and an
-explicit noisy reference. A supplied logical circuit is display metadata unless
-both inputs match a tested encoded example.
-
-The physical view includes every used qubit. It uses `QUBIT_COORDS` when complete
-2D coordinates are available, or a labeled index grid otherwise.
-
-The injection controls are directly below that layout. Select X/Y/Z and a fault
-tick, then click a physical qubit; injected faults appear as individual list
-items. Run again to include the edited list. Faults enter before the selected
-tick's operations, so a later reset can erase an injection.
-
-Editing settings does not run simulation or contact the board.
+The physical view includes every used qubit. The injection controls are directly
+below that layout. Select X/Y/Z and a fault tick, then click a physical qubit
+to inject an error.
 
 ### 5. Simulate and decode
 
-Click **Simulate and decode** in the fixed bottom bar. The server compiles the submitted experiment
-and samples one seeded Stim shot. In FPGA mode it reads the image's capacities,
+Click **Simulate and decode** in the bottom bar. The server compiles the submitted
+experiment and samples one seeded Stim shot. In FPGA mode it reads the image's capacities,
 uploads the circuit's exact ordered graph and decodes that shot's detector bits.
 The FPGA returns an observable-flip mask and measured core cycles. Observable
 truth stays on the host and is used to evaluate the returned prediction.
 
-A graph-load or decoding error produces an error, not a software replacement or
-an old result. The graph upload happens on Run, not on circuit edits or replay.
-
 ### 6. Replay the completed run
 
-Use the bottom bar's play/pause and step buttons, or scrub the circuit tick. Playback
-speed affects only visualization. Replay uses the completed response and sends
-no simulation, graph-upload or decoder requests. Editing invalidates the result
-until the next explicit Run.
-
-Detector events and sampled Pauli frames are derived from the same simulation.
-For the default three-round memory, detector columns `r0`, `r1` and `r2` refer
-to the three ancilla-check readouts at ticks 7, 14 and 21. `r3` is the final data
-readout, also at tick 21: no `TICK` separates it from the last ancilla readout.
-The 22 physical tick positions (0–21) describe gate layers, not 22 check rounds.
-Replay position 22 is the host correction overlay, not another physical tick.
+Use the bottom bar's play/pause and step buttons, or scrub the circuit tick.
 
 The final tick shows prediction versus true observable mask; bit i means flip
-the interpretation of logical observable i. The animation is not physical quantum
-feedback, and the FPGA does not return physical correction gates.
+the interpretation of logical observable i.
 
 ![Web interface after a physical FPGA run](images/web-fpga-layout.png)
 
