@@ -45,15 +45,20 @@ The web entry point is `python -m qec.surface.web` on port 8765. There are two m
 
 ## Benchmarks
 
-[Accuracy](docs/benchmark-accuracy.md), [RTL latency, modeled throughput/backlog and routed resource cost](docs/benchmark-timing.md) are shown below.
+See [accuracy results](docs/benchmark-accuracy.md) and [performance details](docs/benchmark-timing.md); the tables use three-round Z memory at p = 0.001 and 100 MHz.
 
 ![Logical failure probability versus physical noise](docs/images/benchmark-accuracy.png)
 
-![RTL decoding latency versus physical noise](docs/images/benchmark-latency.png)
+| Workload | Mean RTL latency (µs) | p95 (µs) | Modeled capacity (k jobs/s) | Max modeled FIFO wait, 3.3 µs arrivals (µs) |
+| --- | ---: | ---: | ---: | ---: |
+| d3 Z memory | 2.02 | 15.97 | 490.05 | 46.58 |
+| d5 Z memory | 17.77 | 67.05 | 56.21 | 3,728.82 |
 
-![Modeled service capacity and backlog](docs/images/benchmark-backlog.png)
-
-![Routed FPGA resource cost](docs/images/benchmark-resources.png)
+| Routed full-SoC resource | Usage |
+| --- | ---: |
+| LUTs | 9,048 |
+| Flip-flops | 3,195 |
+| BRAM36 tiles | 1.5 |
 
 ## FPGA architecture
 
