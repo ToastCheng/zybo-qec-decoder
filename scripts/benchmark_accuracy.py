@@ -44,15 +44,16 @@ def binomial_interval(failures, shots):
     return low, high
 
 
-def plot_results(rows, output):
+def plot_results(rows, output, *, include_mwpm=True):
     """Draw per-shot failure probabilities; zero estimates use upper-limit markers."""
     plt.rcParams.update({"font.size": 11, "axes.spines.top": False,
                          "axes.spines.right": False, "svg.fonttype": "none"})
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.3), sharey=True)
     colors = {3: "#176eaa", 5: "#c26425"}
+    decoders = (("UF", "-", "o"), ("MWPM", "--", "s")) if include_mwpm else (("UF", "-", "o"),)
     for ax, basis in zip(axes, ("X", "Z")):
         for distance in (3, 5):
-            for decoder, style, marker in (("UF", "-", "o"), ("MWPM", "--", "s")):
+            for decoder, style, marker in decoders:
                 points = [r for r in rows if r["basis"] == basis
                           and r["distance"] == distance and r["decoder"] == decoder]
                 x = np.array([r["p"] for r in points])
@@ -61,7 +62,7 @@ def plot_results(rows, output):
                 high = np.array([r["ci_high"] for r in points])
                 positive = y > 0
                 ax.plot(x, np.where(positive, y, np.nan), style, color=colors[distance],
-                        marker=marker, markersize=4, label=f"d={distance} {decoder}")
+                        marker=marker, markersize=4, label=f"d={distance} {decoder}" if include_mwpm else f"d={distance}")
                 ax.errorbar(x[positive], y[positive],
                             yerr=[y[positive] - low[positive], high[positive] - y[positive]],
                             fmt="none", ecolor=colors[distance], capsize=2, alpha=.65)
@@ -73,7 +74,8 @@ def plot_results(rows, output):
         ax.legend(fontsize=9, loc="upper left")
     axes[0].set_ylabel("Logical failure probability per shot")
     shots = rows[0]["shots"]
-    fig.suptitle("Ordered unweighted UF vs weighted PyMatching", fontsize=15, y=.98)
+    title = "Ordered unweighted UF vs weighted PyMatching" if include_mwpm else "Ordered unweighted UF"
+    fig.suptitle(title, fontsize=15, y=.98)
     fig.text(.5, .025, f"3 extraction rounds · {shots:,} shared shots / point · 95% exact binomial intervals\n"
              "All four Stim noise parameters = p · ▼ zero failures: upper 95% limit · software experiment",
              ha="center", fontsize=10)
@@ -92,6 +94,7 @@ def main():
     parser.add_argument("--seed", type=int, default=20261119)
     parser.add_argument("--p", type=float, nargs="+", default=[.001, .002, .004, .008, .016, .032])
     parser.add_argument("--png", type=Path, help="Optional maintained PNG destination")
+    parser.add_argument("--readme-png", type=Path, help="Optional UF-only README PNG destination")
     args = parser.parse_args()
     if args.shots < 1 or args.batch_size < 1 or args.seed < 0 or args.seed >= 2**64 - 24:
         parser.error("invalid shots, batch size or seed")
@@ -186,6 +189,12 @@ def main():
                     writer.writeheader()
                     writer.writerows(rows)
     plot_results(rows, output)
+    if args.readme_png:
+        readme_output = output / "readme"
+        readme_output.mkdir()
+        plot_results(rows, readme_output, include_mwpm=False)
+        args.readme_png.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(readme_output / "benchmark-accuracy.png", args.readme_png)
     metadata["elapsed_seconds"] = time.perf_counter() - start
     metadata["total_sampled_shots"] = args.shots * index
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")

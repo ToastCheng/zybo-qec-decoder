@@ -47,7 +47,7 @@ The web entry point is `python -m qec.surface.web` on port 8765. There are two m
 
 See [accuracy results](docs/benchmark-accuracy.md) and [performance details](docs/benchmark-timing.md); the tables use three-round Z memory at p = 0.001 and 100 MHz.
 
-![Logical failure probability versus physical noise](docs/images/benchmark-accuracy.png)
+![UF logical failure probability versus physical noise for d=3 and d=5](docs/images/benchmark-accuracy-uf.png)
 
 | Workload | Mean RTL latency (µs) | p95 (µs) | Modeled capacity (k jobs/s) | Max modeled FIFO wait, 3.3 µs arrivals (µs) |
 | --- | ---: | ---: | ---: | ---: |
