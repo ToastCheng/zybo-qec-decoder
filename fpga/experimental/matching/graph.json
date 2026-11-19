@@ -1,0 +1,720 @@
+[
+  [
+    0,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 6.118513106479035,
+      "error_probability": 0.002196890311110929
+    }
+  ],
+  [
+    0,
+    1,
+    {
+      "fault_ids": [],
+      "weight": 6.247689598183272,
+      "error_probability": 0.0019311827343106622
+    }
+  ],
+  [
+    0,
+    8,
+    {
+      "fault_ids": [],
+      "weight": 6.088500797849186,
+      "error_probability": 0.002263671931417261
+    }
+  ],
+  [
+    1,
+    2,
+    {
+      "fault_ids": [],
+      "weight": 6.247689598183272,
+      "error_probability": 0.0019311827343106622
+    }
+  ],
+  [
+    1,
+    5,
+    {
+      "fault_ids": [],
+      "weight": 5.977318982330488,
+      "error_probability": 0.0025292021333331487
+    }
+  ],
+  [
+    4,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 4.861546300641779,
+      "error_probability": 0.007679083917293462
+    }
+  ],
+  [
+    1,
+    8,
+    {
+      "fault_ids": [],
+      "weight": 7.535830462798716,
+      "error_probability": 0.000533333333333148
+    }
+  ],
+  [
+    1,
+    null,
+    {
+      "fault_ids": [
+        0
+      ],
+      "weight": 5.2083591139440575,
+      "error_probability": 0.005440877927752498
+    }
+  ],
+  [
+    2,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 5.208359113944059,
+      "error_probability": 0.005440877927752498
+    }
+  ],
+  [
+    2,
+    3,
+    {
+      "fault_ids": [],
+      "weight": 5.901498812436245,
+      "error_probability": 0.0027278802947788925
+    }
+  ],
+  [
+    6,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 4.5525913823177975,
+      "error_probability": 0.01042992624495177
+    }
+  ],
+  [
+    2,
+    5,
+    {
+      "fault_ids": [],
+      "weight": 6.842683566986824,
+      "error_probability": 0.0010660977777774072
+    }
+  ],
+  [
+    6,
+    9,
+    {
+      "fault_ids": [],
+      "weight": 6.088873842706233,
+      "error_probability": 0.0022628295482273993
+    }
+  ],
+  [
+    9,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 4.552591382317795,
+      "error_probability": 0.010429926244951765
+    }
+  ],
+  [
+    2,
+    8,
+    {
+      "fault_ids": [],
+      "weight": 8.228977572171628,
+      "error_probability": 0.0002667378157289138
+    }
+  ],
+  [
+    2,
+    10,
+    {
+      "fault_ids": [],
+      "weight": 5.9773189823304875,
+      "error_probability": 0.0025292021333331487
+    }
+  ],
+  [
+    3,
+    5,
+    {
+      "fault_ids": [],
+      "weight": 8.22897757217163,
+      "error_probability": 0.0002667378157289138
+    }
+  ],
+  [
+    3,
+    7,
+    {
+      "fault_ids": [],
+      "weight": 6.0885007978491865,
+      "error_probability": 0.0022636719314172607
+    }
+  ],
+  [
+    3,
+    10,
+    {
+      "fault_ids": [],
+      "weight": 7.535830462798716,
+      "error_probability": 0.000533333333333148
+    }
+  ],
+  [
+    3,
+    null,
+    {
+      "fault_ids": [
+        0
+      ],
+      "weight": 5.901498812436244,
+      "error_probability": 0.0027278802947788925
+    }
+  ],
+  [
+    4,
+    6,
+    {
+      "fault_ids": [],
+      "weight": 6.976119535428382,
+      "error_probability": 0.0009330488319746112
+    }
+  ],
+  [
+    5,
+    null,
+    {
+      "fault_ids": [
+        0
+      ],
+      "weight": 5.184433796374041,
+      "error_probability": 0.005571888324269983
+    }
+  ],
+  [
+    4,
+    12,
+    {
+      "fault_ids": [],
+      "weight": 5.625983150912213,
+      "error_probability": 0.0035900839416835874
+    }
+  ],
+  [
+    5,
+    8,
+    {
+      "fault_ids": [],
+      "weight": 6.214031371858273,
+      "error_probability": 0.0019971571671793665
+    }
+  ],
+  [
+    5,
+    10,
+    {
+      "fault_ids": [],
+      "weight": 6.724826481822012,
+      "error_probability": 0.0011992888888887063
+    }
+  ],
+  [
+    5,
+    13,
+    {
+      "fault_ids": [],
+      "weight": 5.977318982330489,
+      "error_probability": 0.0025292021333331483
+    }
+  ],
+  [
+    12,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 5.0099363210291195,
+      "error_probability": 0.006627116447752099
+    }
+  ],
+  [
+    5,
+    16,
+    {
+      "fault_ids": [],
+      "weight": 7.535830462798716,
+      "error_probability": 0.0005333333333331479
+    }
+  ],
+  [
+    7,
+    10,
+    {
+      "fault_ids": [],
+      "weight": 6.214031371858273,
+      "error_probability": 0.001997157167179367
+    }
+  ],
+  [
+    7,
+    13,
+    {
+      "fault_ids": [],
+      "weight": 8.228977572171628,
+      "error_probability": 0.0002667378157289138
+    }
+  ],
+  [
+    10,
+    13,
+    {
+      "fault_ids": [],
+      "weight": 6.842683566986825,
+      "error_probability": 0.0010660977777774074
+    }
+  ],
+  [
+    13,
+    null,
+    {
+      "fault_ids": [
+        0
+      ],
+      "weight": 5.18443379637404,
+      "error_probability": 0.005571888324269984
+    }
+  ],
+  [
+    6,
+    12,
+    {
+      "fault_ids": [],
+      "weight": 7.130365473335587,
+      "error_probability": 0.0007997866287252844
+    }
+  ],
+  [
+    6,
+    14,
+    {
+      "fault_ids": [],
+      "weight": 5.554546161529471,
+      "error_probability": 0.003854906535114725
+    }
+  ],
+  [
+    7,
+    null,
+    {
+      "fault_ids": [
+        0
+      ],
+      "weight": 6.088873842706231,
+      "error_probability": 0.002262829548227399
+    }
+  ],
+  [
+    9,
+    14,
+    {
+      "fault_ids": [],
+      "weight": 7.535830462798716,
+      "error_probability": 0.0005333333333331479
+    }
+  ],
+  [
+    11,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 5.0099363210291195,
+      "error_probability": 0.006627116447752097
+    }
+  ],
+  [
+    14,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 4.5525913823177975,
+      "error_probability": 0.010429926244951763
+    }
+  ],
+  [
+    7,
+    15,
+    {
+      "fault_ids": [],
+      "weight": 6.0885007978491865,
+      "error_probability": 0.0022636719314172607
+    }
+  ],
+  [
+    7,
+    18,
+    {
+      "fault_ids": [],
+      "weight": 7.5358304627987165,
+      "error_probability": 0.0005333333333331479
+    }
+  ],
+  [
+    8,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 6.0888738427062306,
+      "error_probability": 0.002262829548227399
+    }
+  ],
+  [
+    8,
+    16,
+    {
+      "fault_ids": [],
+      "weight": 6.0885007978491865,
+      "error_probability": 0.0022636719314172607
+    }
+  ],
+  [
+    9,
+    11,
+    {
+      "fault_ids": [],
+      "weight": 6.976119535428382,
+      "error_probability": 0.0009330488319746112
+    }
+  ],
+  [
+    10,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 5.184433796374038,
+      "error_probability": 0.005571888324269984
+    }
+  ],
+  [
+    9,
+    12,
+    {
+      "fault_ids": [],
+      "weight": 8.228977572171628,
+      "error_probability": 0.0002667378157289138
+    }
+  ],
+  [
+    10,
+    16,
+    {
+      "fault_ids": [],
+      "weight": 8.228977572171628,
+      "error_probability": 0.0002667378157289138
+    }
+  ],
+  [
+    13,
+    16,
+    {
+      "fault_ids": [],
+      "weight": 6.214031371858273,
+      "error_probability": 0.001997157167179367
+    }
+  ],
+  [
+    9,
+    17,
+    {
+      "fault_ids": [],
+      "weight": 5.55454616152947,
+      "error_probability": 0.003854906535114724
+    }
+  ],
+  [
+    16,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 6.08887384270623,
+      "error_probability": 0.002262829548227399
+    }
+  ],
+  [
+    14,
+    17,
+    {
+      "fault_ids": [],
+      "weight": 6.0888738427062306,
+      "error_probability": 0.0022628295482273993
+    }
+  ],
+  [
+    10,
+    18,
+    {
+      "fault_ids": [],
+      "weight": 5.977318982330489,
+      "error_probability": 0.002529202133333149
+    }
+  ],
+  [
+    11,
+    14,
+    {
+      "fault_ids": [],
+      "weight": 8.228977572171628,
+      "error_probability": 0.0002667378157289138
+    }
+  ],
+  [
+    18,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 5.18443379637404,
+      "error_probability": 0.005571888324269984
+    }
+  ],
+  [
+    11,
+    17,
+    {
+      "fault_ids": [],
+      "weight": 7.130365473335587,
+      "error_probability": 0.0007997866287252844
+    }
+  ],
+  [
+    11,
+    19,
+    {
+      "fault_ids": [],
+      "weight": 5.625983150912213,
+      "error_probability": 0.0035900839416835874
+    }
+  ],
+  [
+    12,
+    14,
+    {
+      "fault_ids": [],
+      "weight": 6.976119535428382,
+      "error_probability": 0.0009330488319746112
+    }
+  ],
+  [
+    17,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 4.5525913823177975,
+      "error_probability": 0.010429926244951763
+    }
+  ],
+  [
+    13,
+    18,
+    {
+      "fault_ids": [],
+      "weight": 6.724826481822012,
+      "error_probability": 0.0011992888888887063
+    }
+  ],
+  [
+    13,
+    20,
+    {
+      "fault_ids": [],
+      "weight": 7.535830462798716,
+      "error_probability": 0.000533333333333148
+    }
+  ],
+  [
+    13,
+    21,
+    {
+      "fault_ids": [],
+      "weight": 5.9773189823304875,
+      "error_probability": 0.0025292021333331487
+    }
+  ],
+  [
+    18,
+    21,
+    {
+      "fault_ids": [],
+      "weight": 6.842683566986825,
+      "error_probability": 0.0010660977777774076
+    }
+  ],
+  [
+    15,
+    null,
+    {
+      "fault_ids": [
+        0
+      ],
+      "weight": 6.088873842706232,
+      "error_probability": 0.002262829548227399
+    }
+  ],
+  [
+    21,
+    null,
+    {
+      "fault_ids": [
+        0
+      ],
+      "weight": 5.487917105311657,
+      "error_probability": 0.004119411256594511
+    }
+  ],
+  [
+    15,
+    18,
+    {
+      "fault_ids": [],
+      "weight": 6.214031371858275,
+      "error_probability": 0.0019971571671793665
+    }
+  ],
+  [
+    19,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 4.861546300641779,
+      "error_probability": 0.007679083917293466
+    }
+  ],
+  [
+    15,
+    21,
+    {
+      "fault_ids": [],
+      "weight": 8.228977572171628,
+      "error_probability": 0.0002667378157289138
+    }
+  ],
+  [
+    15,
+    22,
+    {
+      "fault_ids": [],
+      "weight": 7.535830462798716,
+      "error_probability": 0.000533333333333148
+    }
+  ],
+  [
+    15,
+    23,
+    {
+      "fault_ids": [],
+      "weight": 6.088500797849186,
+      "error_probability": 0.002263671931417261
+    }
+  ],
+  [
+    16,
+    20,
+    {
+      "fault_ids": [],
+      "weight": 6.0885007978491865,
+      "error_probability": 0.0022636719314172607
+    }
+  ],
+  [
+    17,
+    19,
+    {
+      "fault_ids": [],
+      "weight": 6.976119535428382,
+      "error_probability": 0.0009330488319746112
+    }
+  ],
+  [
+    20,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 6.181060008287437,
+      "error_probability": 0.002063965582221853
+    }
+  ],
+  [
+    18,
+    20,
+    {
+      "fault_ids": [],
+      "weight": 8.22897757217163,
+      "error_probability": 0.0002667378157289138
+    }
+  ],
+  [
+    18,
+    22,
+    {
+      "fault_ids": [],
+      "weight": 5.977318982330488,
+      "error_probability": 0.0025292021333331487
+    }
+  ],
+  [
+    22,
+    null,
+    {
+      "fault_ids": [],
+      "weight": 5.487917105311657,
+      "error_probability": 0.004119411256594511
+    }
+  ],
+  [
+    20,
+    21,
+    {
+      "fault_ids": [],
+      "weight": 6.181060008287437,
+      "error_probability": 0.0020639655822218524
+    }
+  ],
+  [
+    21,
+    22,
+    {
+      "fault_ids": [],
+      "weight": 6.670464555550426,
+      "error_probability": 0.0012662043400974562
+    }
+  ],
+  [
+    22,
+    23,
+    {
+      "fault_ids": [],
+      "weight": 6.670464555550426,
+      "error_probability": 0.0012662043400974562
+    }
+  ],
+  [
+    23,
+    null,
+    {
+      "fault_ids": [
+        0
+      ],
+      "weight": 6.479473716619691,
+      "error_probability": 0.0015322666666664818
+    }
+  ]
+]
