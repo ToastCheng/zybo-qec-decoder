@@ -4,6 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const app = path.join(__dirname, "../surface/web_assets/app.js");
 
+/**
+ * Check the fixed memory request dimensions, independently supplied rates, and
+ * rejection of invalid noise or seed.
+ */
 test("run settings use the fixed hardware-compatible template and independent noise rates", () => {
   const { runSettings } = require(app);
   const faults = [{ tick: 8, qubit: 10, pauli: "X" }];
@@ -28,6 +32,10 @@ test("run settings use the fixed hardware-compatible template and independent no
   assert.throws(() => runSettings(noise, -1, []), /seed/i);
 });
 
+/**
+ * Require actionable errors for incomplete layouts while accepting the current
+ * schema unchanged.
+ */
 test("rejects stale server layouts with an actionable restart error", () => {
   const { validateLayout } = require(app);
   assert.throws(
@@ -49,6 +57,10 @@ test("rejects stale server layouts with an actionable restart error", () => {
   assert.equal(validateLayout(layout), layout);
 });
 
+/**
+ * Require one Pauli frame per physical tick before handing a result to the
+ * renderer.
+ */
 test("rejects stale replay schema instead of breaking the render loop", () => {
   const { validateReplay } = require(app);
   assert.throws(
@@ -67,6 +79,10 @@ test("rejects stale replay schema instead of breaking the render loop", () => {
   assert.equal(validateReplay(result, 2), result);
 });
 
+/**
+ * Check clamped, reversible playback and independent faults on the same qubit at
+ * different ticks.
+ */
 test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults", () => {
   const { LabState } = require(app);
   const s = new LabState(21);
@@ -95,6 +111,10 @@ test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults"
   assert.deepEqual(s.faults, []);
 });
 
+/**
+ * Check that fired detectors appear at their availability tick and disappear when
+ * replay scrubs earlier.
+ */
 test("detectors stay unavailable before their measurement boundary, including backward scrub", () => {
   const { visibleDetectors } = require(app);
   const ds = [
@@ -106,6 +126,10 @@ test("detectors stay unavailable before their measurement boundary, including ba
   assert.deepEqual(visibleDetectors(ds, [0, 1], 8), [0]);
 });
 
+/**
+ * Check that Details contains only a run summary and that errors and replay
+ * controls stay in their intended places.
+ */
 test("Details contains only the run summary, without explanatory dumps", () => {
   const html = fs.readFileSync(
     path.join(path.dirname(app), "index.html"),

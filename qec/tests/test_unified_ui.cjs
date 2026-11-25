@@ -2,6 +2,10 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const app = require("../surface/web_assets/app.js");
 
+/**
+ * Check initial control markup: collapsed configuration, accessible Play in the
+ * dock, and no decoder source in the header.
+ */
 test("configuration and editor are collapsed and controls live in the bottom dock", () => {
   const html = require("node:fs").readFileSync(
     require("node:path").join(__dirname, "../surface/web_assets/index.html"),
@@ -22,6 +26,10 @@ test("configuration and editor are collapsed and controls live in the bottom doc
   );
 });
 
+/**
+ * Build six disconnected supports and verify patch wrapping keeps every qubit in
+ * bounds at several widths.
+ */
 test("preset patches wrap within the available width without losing qubits", () => {
   const layout = { data: [], checks: [] };
   for (let patch = 0; patch < 6; patch++) {
@@ -53,6 +61,7 @@ test("preset patches wrap within the available width without losing qubits", () 
   }
 });
 
+/** Require short section headings and no built-in example fault control. */
 test("headings are concise and the example-fault control is absent", () => {
   const html = require("node:fs").readFileSync(
     require("node:path").join(__dirname, "../surface/web_assets/index.html"),
@@ -64,6 +73,10 @@ test("headings are concise and the example-fault control is absent", () => {
   assert.doesNotMatch(html, /id="example"|Example fault/);
 });
 
+/**
+ * Check matrix row and round labels and retain both detectors before revealing
+ * their measured values.
+ */
 test("decoder matrix labels rows and rounds and retains every detector", () => {
   const layout = {
     rows: [
@@ -90,6 +103,10 @@ test("decoder matrix labels rows and rounds and retains every detector", () => {
   assert.match(after, /data-detector="1"[^>]*class="detector fired/);
 });
 
+/**
+ * Check that a two-site boundary support yields an X-check face with finite
+ * coordinates.
+ */
 test("stabilizer faces use actual supports, including boundary checks", () => {
   const grid = app.physicalGrid([
     { id: 0, coords: [1, 1] },

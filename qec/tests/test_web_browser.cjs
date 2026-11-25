@@ -4,6 +4,10 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+/**
+ * Wait for Chrome startup, replay transitions, or asynchronous browser events
+ * before checking state.
+ */
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test(
@@ -12,6 +16,11 @@ test(
     skip: !process.env.QEC_WEB_URL,
     timeout: 30000,
   },
+  /**
+   * Run memory replay in headless Chrome against the real API. Check measured
+   * flips and host correction, local playback, and recovery from failed or
+   * invalidated requests.
+   */
   async (t) => {
     const profile = fs.mkdtempSync(
       path.join(process.env.TMPDIR || os.tmpdir(), "qec-ui-chrome-"),
@@ -29,6 +38,10 @@ test(
       ],
       { stdio: ["ignore", "ignore", "pipe"] },
     );
+    /**
+     * Stop this test's Chrome, wait for its exit, then remove its scratch
+     * profile.
+     */
     t.after(async () => {
       chrome.kill();
       await new Promise((r) => chrome.once("exit", r));
@@ -48,10 +61,12 @@ test(
       })
     ).json();
     const ws = new WebSocket(target.webSocketDebuggerUrl);
+    /** Wait for DevTools to connect or reject if the socket fails to open. */
     await new Promise((resolve, reject) => {
       ws.onopen = resolve;
       ws.onerror = reject;
     });
+    /** Close the DevTools socket at teardown. */
     t.after(() => ws.close());
     let id = 0;
     const requests = new Map();
@@ -59,6 +74,10 @@ test(
     const posts = [];
     let holdRun = false,
       heldRequest;
+    /**
+     * Match DevTools replies, collect network and exception evidence, and either
+     * hold a Run request or return the explicit 503 fixture.
+     */
     ws.onmessage = ({ data }) => {
       const message = JSON.parse(data);
       if (message.id) {
@@ -91,11 +110,19 @@ test(
         });
       }
     };
+    /**
+     * Send a Chrome DevTools Protocol command and await its response by sequence
+     * ID.
+     */
     const cdp = (method, params = {}) =>
       new Promise((resolve, reject) => {
         requests.set(++id, { resolve, reject });
         ws.send(JSON.stringify({ id, method, params }));
       });
+    /**
+     * Evaluate a page expression (including promises) and fail if Chrome reports
+     * an exception.
+     */
     const js = async (expression) => {
       const result = await cdp("Runtime.evaluate", {
         expression,
@@ -108,6 +135,7 @@ test(
       );
       return result.result.value;
     };
+    /** Poll a page condition and show the page's visible text on timeout. */
     const until = async (expression, description) => {
       for (let i = 0; i < 150; i++) {
         if (await js(expression)) return;

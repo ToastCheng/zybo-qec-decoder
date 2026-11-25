@@ -3,11 +3,19 @@ const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+/**
+ * Wait before polling Chrome or checking that pause held the replay position.
+ */
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test(
   "paper editor keeps circuit and every physical qubit visible",
   { skip: !process.env.QEC_WEB_URL, timeout: 90000 },
+  /**
+   * Exercise the paper editor against a live QEC web server. Check local presets
+   * and edits, responsive layout, and replay of submitted circuits. In
+   * presets-only mode, require FPGA results.
+   */
   async (t) => {
     const profile = fs.mkdtempSync(
       path.join(process.env.TMPDIR, "qec-circuit-chrome-"),
@@ -23,6 +31,10 @@ test(
     let log = "",
       socket;
     chrome.stderr.on("data", (data) => (log += data));
+    /**
+     * Close DevTools and remove this test's private Chrome profile after
+     * shutdown.
+     */
     t.after(async () => {
       socket?.close();
       chrome.kill();
@@ -44,6 +56,10 @@ test(
     const pending = new Map(),
       posts = [],
       errors = [];
+    /**
+     * Settle DevTools commands by ID and collect POSTs and browser exceptions
+     * from before navigation.
+     */
     socket.onmessage = ({ data }) => {
       const msg = JSON.parse(data);
       if (msg.id) {
@@ -60,12 +76,20 @@ test(
       else if (msg.method === "Runtime.exceptionThrown")
         errors.push(msg.params.exceptionDetails);
     };
+    /**
+     * Send a Chrome DevTools Protocol command and resolve it when its matching
+     * reply arrives.
+     */
     const cdp = (method, params = {}) =>
       new Promise((resolve, reject) => {
         const id = ++seq;
         pending.set(id, { resolve, reject });
         socket.send(JSON.stringify({ id, method, params }));
       });
+    /**
+     * Evaluate JavaScript in Chrome and return its value; fail the test on
+     * page-side exceptions.
+     */
     const js = async (expression) => {
       const result = await cdp("Runtime.evaluate", {
         expression,
@@ -78,6 +102,10 @@ test(
       );
       return result.result.value;
     };
+    /**
+     * Poll a page condition while layout or a run settles. Include the visible
+     * page text on timeout.
+     */
     const until = async (expression, label) => {
       for (let i = 0; i < 300; i++) {
         if (await js(expression)) return;
@@ -85,6 +113,10 @@ test(
       }
       assert.fail(`${label}: ${await js("document.body.innerText")}`);
     };
+    /**
+     * Set a 1000px-tall test viewport and enable mobile emulation below 500px
+     * wide.
+     */
     const viewport = (width) =>
       cdp("Emulation.setDeviceMetricsOverride", {
         width,
@@ -92,6 +124,10 @@ test(
         deviceScaleFactor: 1,
         mobile: width < 500,
       });
+    /**
+     * When capture is enabled, wait two animation frames and save a viewport PNG
+     * under QEC_SCREENSHOTS_DIR.
+     */
     const screenshot = async (name) => {
       if (!process.env.QEC_SCREENSHOTS_DIR) return;
       fs.mkdirSync(process.env.QEC_SCREENSHOTS_DIR, { recursive: true });
@@ -176,6 +212,10 @@ test(
       await js('document.querySelector("#scenario").textContent'),
       "No faults",
     );
+    /**
+     * Require the fixed bottom dock and every replay control to fit within the
+     * viewport.
+     */
     const assertDockFits = async () => {
       await until(
         '(() => {const dock=document.querySelector("#control-dock").getBoundingClientRect();return dock.bottom<=innerHeight+1 && ["run","play","back","step","speed","scrubber"].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.top>=dock.top && r.bottom<=innerHeight})})()',
@@ -188,6 +228,10 @@ test(
         "fixed",
       );
     };
+    /**
+     * Require the preset lattice to fill its workspace and contain every qubit
+     * without scrolling or clipping.
+     */
     const assertPresetFits = async (name) => {
       await assertDockFits();
       await until(
@@ -443,6 +487,10 @@ test(
     await js(
       'document.querySelector("#circuit-template").value="custom";document.querySelector("#circuit-template").dispatchEvent(new Event("change"))',
     );
+    /**
+     * Enter the annotated circuit and optional logical text, explicitly Run, and
+     * require replay to become available.
+     */
     const run = async (circuit, logical = "") => {
       await js(
         `document.querySelector('#circuit-text').value=${JSON.stringify(circuit)};document.querySelector('#logical-text').value=${JSON.stringify(logical)};document.querySelector('#circuit-text').dispatchEvent(new Event('input'));document.querySelector('#run').click()`,
