@@ -1,4 +1,4 @@
-"""Capture all 24 X/Z d3/d5 points on the connected Zybo; no software fallback."""
+"""Run the 24-point X/Z d3/d5 benchmark corpus on a connected Zybo Z7-10 over UART."""
 import argparse
 import hashlib
 import json
@@ -12,13 +12,19 @@ from qec.surface.host import DecoderIdentity, DecoderReply, GraphDecoder, Protoc
 
 
 class FrontierDecoder(GraphDecoder):
-    """Opt in to the 0xd505 parity-frontier program protocol with PL CRC readback."""
+    """UART host client for the 0xd505 programmable parity-frontier bitstream."""
 
     def __init__(self, port, **kwargs):
+        """Open the UART client with no cached program CRC."""
         super().__init__(port, **kwargs)
         self._program_crc = None
 
     def frontier_identity(self):
+        """Query the 17-word metadata and return (DecoderIdentity, program_crc).
+
+        Verifies protocol version 0xd505 and 128/1024/1 capacities before
+        adapting the first 15 words to DecoderIdentity.
+        """
         payload = self._transact(1)
         if len(payload) != 68:
             self._loaded = None
@@ -30,9 +36,15 @@ class FrontierDecoder(GraphDecoder):
         return DecoderIdentity((2,) + words[1:15]), (words[15] | words[16] << 16)
 
     def identity(self):
+        """Return DecoderIdentity without the trailing program CRC."""
         return self.frontier_identity()[0]
 
     def load_program(self, detectors, records, expected_crc):
+        """Upload 10-byte DP program records in 51-record chunks and commit.
+
+        Checks that the board reports a valid program with the requested
+        dimensions, incremented generation, and matching hardware CRC-32.
+        """
         with self._lock:
             self._loaded = None
             self._program_crc = None
@@ -56,6 +68,11 @@ class FrontierDecoder(GraphDecoder):
             return after
 
     def decode_checked(self, syndrome):
+        """Decode one packed syndrome without per-shot identity polling.
+
+        Validates reply width, positive cycle count, error flag, and 1-bit
+        prediction. Call verify_intact() after the point to recheck metadata/CRC.
+        """
         with self._lock:
             loaded = self._loaded
             if loaded is None:
@@ -71,6 +88,7 @@ class FrontierDecoder(GraphDecoder):
             return DecoderReply(prediction, cycles, False)
 
     def verify_intact(self):
+        """Confirm the loaded program identity and hardware CRC did not change."""
         after, crc = self.frontier_identity()
         if (self._loaded is None or not after.valid or after.words[:10] != self._loaded.words[:10]
                 or crc != self._program_crc):
@@ -79,9 +97,10 @@ class FrontierDecoder(GraphDecoder):
 
 
 class FastUFDecoder(GraphDecoder):
-    """Same PL UF graph upload/decode; verify identity per point instead of twice per shot."""
+    """UF host client that verifies graph identity once per point instead of per shot."""
 
     def decode_checked(self, syndrome):
+        """Decode one packed syndrome and check reply width, cycles, and error flag."""
         with self._lock:
             loaded = self._loaded
             if loaded is None:
@@ -97,6 +116,7 @@ class FastUFDecoder(GraphDecoder):
             return DecoderReply(prediction, cycles, False)
 
     def verify_intact(self):
+        """Confirm the board still reports the same loaded UF graph."""
         after = self.identity()
         if self._loaded is None or not after.valid or after.words[:10] != self._loaded.words[:10]:
             self._loaded = None
@@ -104,6 +124,12 @@ class FastUFDecoder(GraphDecoder):
 
 
 def expected_frontier_cycles(width, operations, syndrome):
+    """Exact PL cycle count for the frontier FSM (1 cycle for zero syndrome).
+
+    For nonzero syndromes: `groups` cycles in INIT, `2 + 6 * groups` per DP op
+    (PROGRAM_READ, PROGRAM_PREP, then 6-cycle group sweeps), plus 2 cycles for
+    FINAL_READ and FINAL_LATCH.
+    """
     if syndrome == 0:
         return 1
     groups = 1 << (max(width, 2) - 2)
@@ -111,6 +137,12 @@ def expected_frontier_cycles(width, operations, syndrome):
 
 
 def main():
+    """Replay every corpus point on the board and save results and UART wire logs.
+
+    For matching, first verifies that a zero-mask record is rejected in PL.
+    Checks every hardware prediction (and frontier cycle count) against the
+    corpus reference before writing per-point JSON files and summary.json.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--decoder', choices=('uf', 'matching'), required=True)
     parser.add_argument('--corpus', type=Path, required=True)
@@ -122,7 +154,7 @@ def main():
     cls = FrontierDecoder if args.decoder == 'matching' else FastUFDecoder
     with cls(args.port, timeout=3.0) as board:
         if args.decoder == 'matching':
-            # Deliberate zero-mask program record must fail in PL and stay disarmed.
+            # Confirm PL rejects an invalid zero-mask record and leaves decode disarmed.
             board._ack(2, struct.pack('<HHH', 3, 2, 1))
             try:
                 board._ack(3, struct.pack('<HHHI', 0, 0, 0, 1))

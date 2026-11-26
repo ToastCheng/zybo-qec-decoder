@@ -1,3 +1,5 @@
+"""Tests for batch circuit execution and artifact archiving in `qec.surface.run.run_circuit`."""
+
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +12,7 @@ EXAMPLE = ROOT / "qec/tests/fixtures/bare_phase_bell.stim"
 
 
 def test_software_run_archives_actual_seeded_shots(tmp_path):
+    """Software batch runs archive shots matching an independent seeded Stim sample and refuse to overwrite existing output."""
     from qec.surface.run import run_circuit
 
     source = EXAMPLE.read_text()
@@ -40,11 +43,13 @@ def test_software_run_archives_actual_seeded_shots(tmp_path):
 
 
 def test_board_failure_archives_partial_evidence_without_success(tmp_path):
+    """A mid-run board timeout saves wire and error records without writing a success summary."""
     from qec.surface.run import run_circuit
 
     calls = []
 
     class TestBoard:
+        """Fake hardware decoder that loads graphs normally and raises a timeout on decode."""
         def __init__(self, port):
             calls.append(("port", port))
             self.transactions = []
@@ -88,6 +93,7 @@ def test_board_failure_archives_partial_evidence_without_success(tmp_path):
 
 
 def test_invalid_request_never_opens_serial(tmp_path):
+    """Invalid shot counts, seeds, and nondeterministic detectors fail before opening a serial device."""
     from qec.surface.run import run_circuit
 
     def forbidden(port):

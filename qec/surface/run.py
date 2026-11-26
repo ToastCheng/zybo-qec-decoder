@@ -1,4 +1,9 @@
-"""Compile, sample and archive annotated circuit decoding runs."""
+"""Compile a Stim circuit, sample seeded shots, decode them, and archive results.
+
+Ties together circuit compilation (``circuit.py``), software Union-Find
+decoding (``decoder.py``), window partitioning (``partition.py``), and the FPGA
+UART driver (``host.py``) behind a Python API and CLI entrypoint.
+"""
 
 import argparse
 import hashlib
@@ -16,6 +21,7 @@ from qec.surface.partition import decode_chunks, partition_graph
 
 
 def _write_json(path, value):
+    """Write indented JSON with a trailing newline to a new file (no overwrite)."""
     with Path(path).open("x") as stream:
         json.dump(value, stream, indent=2)
         stream.write("\n")
@@ -31,7 +37,30 @@ def run_circuit(
     out=None,
     decoder_factory=GraphDecoder,
 ):
-    """Compile and upload once, then record sampled shots and measured replies."""
+    """Compile a circuit, sample seeded shots, decode them, and return a summary.
+
+    Compiles ``text`` using ``HOST_CAPACITIES``, samples ``shots`` (1..4096)
+    with Stim's detector sampler using unsigned 64-bit ``seed``, and decodes
+    every shot. When ``port`` is ``None``, shots are decoded purely with the
+    software reference decoder (raising ``ValueError`` if any shot fails to
+    resolve). When ``port`` is given, the board is opened via
+    ``decoder_factory(port)``, the graph is partitioned to fit the FPGA's
+    capacities, and each hardware prediction is checked against both the
+    sampled observable and the software reference. Single-window graphs are
+    uploaded once before the shot loop; multi-window graphs are decoded per
+    shot through ``decode_chunks``.
+
+    Returns a summary dictionary with ``source`` (``"FPGA"`` or ``"Software"``),
+    ``shots``, ``seed``, the compiled ``counts`` fields, ``logical_failures``,
+    ``reference_mismatches``, and ``graph_sha256``.
+
+    If ``out`` is provided, creates a fresh archive directory (never
+    overwriting an existing one) containing ``circuit.json``, streaming
+    per-shot records in ``shots.jsonl``, ``wire.json`` (for FPGA runs),
+    ``manifest.json`` (environment metadata and file SHA-256 digests), and
+    ``summary.json``. If an error happens after the directory is created,
+    writes ``wire.json`` (if applicable) and ``error.json`` before re-raising.
+    """
     if type(shots) is not int or not 1 <= shots <= 4096:
         raise ValueError("shots must be an integer in 1..4096")
     if type(seed) is not int or not 0 <= seed < 2**64:
@@ -182,6 +211,7 @@ def run_circuit(
 
 
 def main():
+    """CLI entrypoint that reads Stim files, runs a shot batch, and prints JSON."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("circuit", type=Path)
     parser.add_argument(

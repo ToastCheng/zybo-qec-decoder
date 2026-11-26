@@ -1,9 +1,22 @@
-/* Compile the production parser into the native test. */
+/*
+ * Native host unit tests for the ARM firmware parser and GPIO mailbox adapter.
+ *
+ * Includes ../src/main.c with QEC_NATIVE=1 and exercises:
+ *   1. Mid-decode PL reset and metadata-drift detection through the real GPIO
+ *      adapter (test_reset_during_decode, 8 fault/ok modes)
+ *   2. GPIO word packing, status/error translation, index bounds, and ACK stall
+ *      timeout recovery (test_gpio_adapter)
+ *   3. Bad CRC, oversize length, partial-frame timeout, invalid opcode/syndrome,
+ *      and failed-commit recovery (test_parser_recovery)
+ *   4. End-to-end metadata, graph load, decode reply, and the standard
+ *      IEEE CRC-32 check vector "123456789" -> 0xCBF43926 (main)
+ */
 #define QEC_NATIVE 1
 #include "../src/main.c"
 #include <assert.h>
 #include <stdio.h>
 
+/* Mock PL mailbox and UART reply capture state used by parser tests. */
 static uint16_t metadata[15] = {2, 128, 512, 32};
 static uint16_t staged[8];
 static unsigned edge_count;
@@ -15,7 +28,9 @@ static uint16_t syndrome_words[8];
 static uint8_t reply[521];
 static size_t reply_length;
 
-/* This mailbox double tests the parser, not the PL decoder. */
+/* Mock mailbox callback: tracks graph staging/commit and returns a canned
+ * decode result; optionally injects `forced_status` for error-path tests.
+ */
 static int mailbox(void *user, uint8_t op, uint8_t index, uint16_t data,
                    uint16_t *value)
 {
@@ -64,6 +79,7 @@ static int mailbox(void *user, uint8_t op, uint8_t index, uint16_t data,
     return 0;
 }
 
+/* Capture the synchronous reply frame into `reply` / `reply_length`. */
 static void emit(void *user, const uint8_t *data, size_t length)
 {
     (void)user;
@@ -72,6 +88,9 @@ static void emit(void *user, const uint8_t *data, size_t length)
     reply_length = length;
 }
 
+/* Build a valid 0xD4 request (seq=17), stream it byte-by-byte through qec_feed(),
+ * and verify the emitted 0x4D reply header, sequence echo, and CRC-32.
+ */
 static void request(qec_parser *parser, uint8_t op, const uint8_t *payload,
                     uint16_t length)
 {
@@ -96,6 +115,7 @@ static void request(qec_parser *parser, uint8_t op, const uint8_t *payload,
             (uint32_t)reply[reply_length - 1] << 24));
 }
 
+/* Mock GPIO hardware registers and deterministic millisecond clock. */
 static uint32_t gpio_control;
 static uint32_t gpio_now;
 static uint32_t gpio_error;
@@ -107,6 +127,7 @@ static void gpio_write(void *user, uint32_t value)
     gpio_control = value;
 }
 
+/* Mirror REQ to ACK unless `gpio_stall` forces a phase mismatch for timeout tests. */
 static uint32_t gpio_read(void *user)
 {
     (void)user;
@@ -122,6 +143,9 @@ static uint32_t gpio_clock(void *user)
     return gpio_now++;
 }
 
+/* Verify GPIO control-word packing, readback, error codes, timeout recovery,
+ * and index range checks.
+ */
 static void test_gpio_adapter(void)
 {
     qec_gpio gpio;
@@ -139,17 +163,20 @@ static void test_gpio_adapter(void)
     assert(qec_gpio_mailbox(&gpio, 6, 0, 0, &result) == 4);
     gpio_stall = 0;
     assert(qec_gpio_mailbox(&gpio, 8, 0, 0, &result) == 0);
-    /* Reject indices outside the mailbox register range. */
+    /* Reject out-of-range metadata and staging indices before touching GPIO. */
     assert(qec_gpio_mailbox(&gpio, 7, 15, 0, &result) == 1);
     assert(qec_gpio_mailbox(&gpio, 1, 8, 0, &result) == 1);
 }
 
+/* Verify that malformed frames, timeouts, bad syndromes, and failed PL commands
+ * return the expected status codes and leave the parser ready for the next request.
+ */
 static void test_parser_recovery(void)
 {
     qec_parser parser;
     qec_init(&parser, mailbox, emit, NULL, 100);
     unsigned calls = mailbox_calls;
-    /* A corrupt CRC must not dispatch a command. */
+    /* Corrupt CRC must return status 1 without invoking the mailbox. */
     const uint8_t corrupt[] = {0xd4, 17, 6, 0, 0, 0, 0, 0, 0};
     for (size_t i = 0; i < sizeof(corrupt); ++i) {
         qec_feed(&parser, corrupt[i], (uint32_t)i);
@@ -157,6 +184,7 @@ static void test_parser_recovery(void)
     assert(reply[2] == 1 && mailbox_calls == calls);
     request(&parser, 1, NULL, 0);
     assert(reply[2] == 0);
+    /* Oversize length (513 bytes) must reject immediately after the 5-byte header. */
     const uint8_t oversize[] = {0xd4, 17, 3, 1, 2};
     for (size_t i = 0; i < sizeof(oversize); ++i) {
         qec_feed(&parser, oversize[i], (uint32_t)i);
@@ -164,7 +192,7 @@ static void test_parser_recovery(void)
     assert(reply[2] == 1);
     request(&parser, 1, NULL, 0);
     assert(reply[2] == 0);
-    /* Time out a partial packet, then accept a complete request. */
+    /* Stalled partial frames expire with status 4 on qec_tick(), then recover. */
     const uint8_t partial[] = {0xd4, 17, 3, 10, 0, 1, 2};
     for (size_t i = 0; i < sizeof(partial); ++i) {
         qec_feed(&parser, partial[i], (uint32_t)i);
@@ -186,7 +214,7 @@ static void test_parser_recovery(void)
     assert(reply[2] == 1);
     request(&parser, 1, NULL, 0);
     assert(reply[2] == 0);
-    forced_status = 1; /* Exercise an acknowledged configuration rejection. */
+    forced_status = 1; /* Propagate PL config rejection and mailbox timeout. */
     uint8_t dimensions[] = {9, 0, 1, 0, 32, 0};
     request(&parser, 2, dimensions, sizeof(dimensions));
     assert(reply[2] == 1);
@@ -196,18 +224,20 @@ static void test_parser_recovery(void)
     forced_status = 0;
     request(&parser, 1, NULL, 0);
     assert(reply[2] == 0);
+    /* Reject decode when unconfigured, when syndrome padding bits are set, or length mismatches. */
     metadata[7] = 0;
     uint8_t syndrome[] = {1, 0};
     request(&parser, 5, syndrome, sizeof(syndrome));
     assert(reply[2] == 2);
     metadata[4] = 9;
     metadata[7] = 1;
-    syndrome[1] = 2; /* Set a detector bit outside the configured count. */
+    syndrome[1] = 2; /* Detector bit 9 is outside the 9-detector graph. */
     unsigned decodes = decode_calls;
     request(&parser, 5, syndrome, sizeof(syndrome));
     assert(reply[2] == 1 && decode_calls == decodes);
     request(&parser, 5, syndrome, 1);
     assert(reply[2] == 1 && decode_calls == decodes);
+    /* Decode error (status 3) still carries the 9-byte result payload with error=1. */
     metadata[14] = 1;
     syndrome[1] = 1;
     request(&parser, 5, syndrome, sizeof(syndrome));
@@ -221,6 +251,7 @@ static void test_parser_recovery(void)
     metadata[14] = 0;
     request(&parser, 6, NULL, 0);
     assert(reply[2] == 0 && metadata[7] == 1);
+    /* Max-length (512-byte) payload filled with 0xD4 magic bytes must not confuse framing. */
     uint8_t maximum_payload[512];
     memset(maximum_payload, 0xd4, sizeof(maximum_payload));
     request(&parser, 99, maximum_payload, sizeof(maximum_payload));
@@ -228,7 +259,7 @@ static void test_parser_recovery(void)
     request(&parser, 1, NULL, 0);
     assert(reply[2] == 0);
 
-    /* A failed commit must leave the new graph invalid. */
+    /* A failed commit must leave the graph disarmed so subsequent decodes return status 2. */
     request(&parser, 2, dimensions, sizeof(dimensions));
     assert(reply[2] == 0 && metadata[7] == 0);
     forced_status = 1;
@@ -243,12 +274,18 @@ static void test_parser_recovery(void)
     assert(reply[2] == 0);
 }
 
-/* Start with ACK one so a simulated reset can alias the next decode toggle. */
+/* Mock GPIO double for simulating a PL reset or metadata corruption during op 6. */
 static uint32_t reset_status;
 static unsigned reset_mode;
 static int reset_decoded;
 static uint16_t reset_meta[15];
 
+/* Fault modes injected on op 6 (decode):
+ *   0: PL reset zeros status (aliases toggle-0 ACK, missing DONE)
+ *   1: valid flag cleared    2: generation changed   3: detector_count changed
+ *   4: edge_count changed    5: observable_count changed  6: cycles == 0
+ *   7: clean decode (control case)
+ */
 static void reset_write(void *user, uint32_t control)
 {
     (void)user;
@@ -260,7 +297,7 @@ static void reset_write(void *user, uint32_t control)
         reset_decoded = 1;
         if (reset_mode == 0) {
             memset(reset_meta, 0, sizeof(reset_meta));
-            reset_status = 0; /* Reset clears status to the outstanding toggle value. */
+            reset_status = 0; /* Zeroed status matches toggle=0 but omits DONE. */
             return;
         }
         reset_status |= 0x40000000u;
@@ -293,6 +330,9 @@ static uint32_t reset_read(void *user)
     return reset_status;
 }
 
+/* Exercise parser + real qec_gpio_mailbox across all 8 reset/corruption modes;
+ * only mode 7 (DONE set, metadata unchanged, cycles > 0) may return status 0.
+ */
 static void test_reset_during_decode(void)
 {
     for (reset_mode = 0; reset_mode <= 7; ++reset_mode) {
@@ -320,6 +360,7 @@ static void test_reset_during_decode(void)
     }
 }
 
+/* Run all unit tests, a full load/decode flow, and the IEEE CRC-32 test vector. */
 int main(void)
 {
     test_reset_during_decode();

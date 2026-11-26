@@ -1,4 +1,12 @@
-"""Check the code guide and links in current documentation."""
+"""Verify repository documentation links and the code walkthrough coverage.
+
+Checks that `docs/code-walkthrough.md` exists, is linked from `README.md`, and
+mentions the main source trees, and verifies that all local relative links in
+maintained Markdown files resolve on disk.
+
+Usage:
+    pytest scripts/test_source_docs.py
+"""
 
 import re
 import subprocess
@@ -10,7 +18,7 @@ GUIDE = Path("docs/code-walkthrough.md")
 
 
 def maintained_documents():
-    """Find current documents, including uncommitted files."""
+    """Yield repo-relative paths for tracked and untracked Markdown files, skipping results and fixtures."""
     output = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
         cwd=ROOT,
@@ -24,7 +32,7 @@ def maintained_documents():
 
 
 def local_link_paths(text):
-    """Read local file paths from Markdown links."""
+    """Extract local file paths from Markdown links and images, ignoring URLs and bare fragments."""
     for destination in re.findall(r"!?\[[^\]]*\]\(([^)]+)\)", text):
         destination = destination.split()[0].strip("<>")
         parsed = urlsplit(destination)
@@ -34,6 +42,7 @@ def local_link_paths(text):
 
 
 def test_central_walkthrough_is_linked_and_covers_source_directories():
+    """Verify that README links to the code walkthrough and that the walkthrough lists all main source trees."""
     guide = ROOT / GUIDE
     assert guide.is_file(), f"Missing source guide: {GUIDE}"
     text = guide.read_text()
@@ -49,6 +58,7 @@ def test_central_walkthrough_is_linked_and_covers_source_directories():
 
 
 def test_maintained_markdown_local_links_resolve():
+    """Verify that every local relative link in maintained Markdown docs points to an existing file."""
     missing = []
     for document in maintained_documents():
         for target in local_link_paths((ROOT / document).read_text()):
@@ -58,6 +68,7 @@ def test_maintained_markdown_local_links_resolve():
 
 
 def test_local_link_paths_excludes_urls_and_preserves_relative_paths():
+    """Verify that link extraction drops external URLs and fragments while unquoting relative paths."""
     text = (
         "[source](../qec/surface/decoder.py#decode) [section](#fpga) "
         "[web](https://example.com/doc) ![image](images/example.png) "

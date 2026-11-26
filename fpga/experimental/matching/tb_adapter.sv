@@ -1,4 +1,8 @@
 `timescale 1ns/1ps
+// Testbench for the fixed d3/r3 Z-memory qec_decoder adapter and matching_exact
+// core. Verifies graph-identity rejection on a tampered edge, exact cost,
+// prediction, and cycle counts over 1,050 reference vectors, output hold
+// stability, and program-preserving shot_abort recovery.
 module tb_adapter;
     logic clk = 0;
     always #5 clk = !clk;
@@ -18,9 +22,12 @@ module tb_adapter;
     integer g, f, parsed, i, j, count, a, b, o, expected, uf, err, truth, elapsed;
     logic [59:0] cost;
     logic [23:0] shot;
+    // Advance one clock and sample 1 ns later so DUT register updates settle.
     task tick;
         @(posedge clk); #1;
     endtask
+    // Upload all 78 frozen edges from uf_graph.txt in order. When poison=1,
+    // flip edge 10's observable bit and verify that write and commit both fail.
     task load(input bit poison);
         @(negedge clk); cfg_begin = 1;
         tick();
@@ -71,7 +78,7 @@ module tb_adapter;
             @(negedge clk); out_ready = 1; tick();
             @(negedge clk); out_ready = 0;
         end
-        // Abort must preserve graph validity and allow a fresh whole computation.
+        // Mid-decode shot_abort must keep configured=1 and allow a fresh decode.
         in_valid = 1; tick();
         @(negedge clk); in_valid = 0;
         repeat(20) tick();

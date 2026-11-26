@@ -1,51 +1,70 @@
 # Zybo QEC Decoder
 
-This is an educational project that runs a QEC pipeline on a relatively cheap Zybo
-Z7-10 FPGA board. It uses Stim to simulate a circuit and sends the detector bits
-to the board via UART. The FPGA decodes them and returns a prediction, which the
-host compares with the simulated observable flips.
+This project runs a quantum error correction (QEC) decoding pipeline on a
+Digilent Zybo Z7-10 FPGA board (`xc7z010clg400-1`). On the host computer,
+Stim simulates a noisy quantum circuit and sends the resulting detector bits
+over UART to the board. The FPGA decodes those bits in programmable logic and
+returns a predicted logical observable flip, which the host compares against
+the true simulated outcome.
 
-The whole process can be controlled and visualized through a web interface. A simpler
-CLI is also available. Start with the [quick start](docs/quickstart.md)
-for setup, building, board loading and the web interface. See the
-[code walkthrough](docs/code-walkthrough.md) for implementation details.
+You can drive the pipeline and inspect every step in a local web interface, or
+run batches from the command line. Start with the
+[quick start](docs/quickstart.md) to set up the tools, build the image, load
+the board, and launch the UI. See the
+[code walkthrough](docs/code-walkthrough.md) for a tour of the source tree, or
+[decoder design](docs/decoder-design.md) for the algorithm and hardware
+protocols.
 
 ## Replay demos
 
-Captured from the web interface after real FPGA decodes. Both examples use seed
-`20261107` and an explicitly injected X fault at tick 8. Replay shows the simulated
-Pauli frame and detector bits; the FPGA predicts observable flips. The green
-correction overlay is computed by the host, not returned by the FPGA.
+Both clips below were recorded from the web interface after real FPGA decodes.
+Each run uses seed `20261107` and a manually injected X fault at tick 8. The
+replay animates the simulated Pauli errors and detector triggers; the FPGA
+itself only receives the detector bits and returns a logical flip prediction.
+The green correction overlay at the end is computed on the host to help
+visualize a matching physical recovery.
 
-### Z memory · one distance-3 patch
+### Z memory (one distance-3 patch)
 
-17 physical qubits, three extraction rounds, with the fault on q1.
+17 physical qubits (9 data, 8 ancillas) over three stabilizer rounds, with an X
+fault injected on `q1`.
 
 ![Z-memory replay showing active gates, the injected X fault, detector activity and the host correction overlay](docs/images/z-memory-replay.gif)
 
-### Encoded Bell · two distance-3 patches
+### Encoded Bell (two distance-3 patches)
 
-34 physical qubits, with the fault on q0. The FPGA prediction matches the sampled
-observable flip. The [encoded-example assumptions](qec/examples/README.md) apply.
+34 physical qubits across two patches, with an X fault injected on `q0`. The
+FPGA prediction matches the simulated observable flip. See
+[encoded circuit examples](qec/examples/README.md) for the circuit and noise
+model details.
 
 ![Encoded-Bell replay showing two surface-code patches, the logical Bell circuit and detector bits](docs/images/encoded-bell-replay.gif)
 
-## Workflow
+## How it works
 
-1. Choose a circuit preset in the web interface or provide a custom annotated
-   physical circuit.
-2. Configure the error rates and inject errors.
-3. Press "Simulate and decode" to compile the circuit, simulate it and run the decoder.
-4. Replay the simulation using the bottom timeline controls.
+1. Pick a built-in circuit preset in the web interface, or paste a custom
+   detector-annotated Stim circuit under **Advanced**.
+2. Adjust noise rates and the random seed under **Configure**, or click
+   physical qubits to inject specific Pauli faults.
+3. Click **Simulate and decode** to compile the circuit's decoding graph,
+   sample one shot with Stim, and decode the detector bits.
+4. Step through or play back the shot using the timeline bar at the bottom.
 
-The web entry point is `python -m qec.surface.web` on port 8765. There are two modes:
+Launch the web interface with `python -m qec.surface.web` (port `8765` by
+default):
 
-- Software mode (default) runs the Python reference decoder.
-- FPGA mode (with `--serial-port /dev/ttyUSBx`) uses the FPGA decoder.
+- **Software mode** (default) decodes on the host with the Python union-find
+  reference decoder.
+- **FPGA mode** (`--serial-port /dev/ttyUSBx`) uploads the decoding graph to
+  the Zybo board and runs decoding in hardware.
 
 ## Benchmarks
 
-See [accuracy results](docs/benchmark-accuracy.md) and [performance details](docs/benchmark-timing.md); the tables use three-round Z memory at p = 0.001 and 100 MHz.
+Full methodology and hardware comparisons live in
+[accuracy results](docs/benchmark-accuracy.md) and
+[decoder performance](docs/benchmark-timing.md). The tables below summarize
+the default runtime union-find (UF) core on three-round rotated Z memory at
+`p = 0.001` and 100 MHz.
 
 ![UF logical failure probability versus physical noise for d=3 and d=5](docs/images/benchmark-accuracy-uf.png)
 
@@ -97,15 +116,21 @@ flowchart TB
     arm <-->|"AXI GP0"| gpio
 ```
 
-The ARM firmware handles UART framing and mailbox access; PL performs the decode.
-The host uploads an ordered graph at runtime, then sends detector bits for each
-shot. The default image supports up to 128 detectors, 512 edges and 32 observable
-bits. Compatible graphs can be replaced without rebuilding the FPGA image.
+The Zynq chip splits the work between its ARM processor (PS) and programmable
+logic (PL):
 
-The core processes one shot at a time using unweighted union-find growth and forest
-peeling. A finite-state machine (FSM) controls the steps, processing edges serially
-and storing intermediate values in registers between clock cycles. Selected edge
-masks are XORed into the observable prediction. A valid all-zero syndrome skips
-work-state initialization and completes in one counted clock; during peeling,
-nonforest and already-removed edges skip the endpoint/work-read stages. The core
-holds its result until the mailbox bridge accepts it.
+- **ARM firmware (PS)** handles framed UART packets from the host and drives a
+  32-bit AXI GPIO mailbox into programmable logic.
+- **Decoder core (PL)** stores an uploaded decoding graph and decodes one
+  syndrome shot at a time. The default image holds up to 128 detectors, 512
+  edges, and 32 logical observable bits, so you can switch between compatible
+  circuits at runtime without rebuilding the bitstream.
+
+Inside the core, a finite-state machine (FSM) runs unweighted union-find
+growth followed by forest peeling. It scans edges one at a time, keeping
+intermediate values in registers between clock cycles, and XORs the observable
+masks of selected edges to form the final prediction. Two shortcuts save
+cycles: an all-zero syndrome finishes in a single counted clock without
+clearing work arrays, and peeling skips nonforest or already-removed edges in
+one clock. Once done, the core holds the prediction, error flag, and cycle
+count until the mailbox bridge reads them out.

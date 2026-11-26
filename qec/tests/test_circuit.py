@@ -1,3 +1,5 @@
+"""Tests for Stim circuit compilation, preflight resource limits, and DEM-to-graph validation."""
+
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -16,6 +18,7 @@ import stim
     ],
 )
 def test_examples_real_stim_and_matching(name, qubits, detectors, edges):
+    """Check that fixture circuits compile to expected counts, stay noiseless without errors, and decode with PyMatching."""
     from qec.surface.circuit import compile_circuit
 
     text = (Path(__file__).parent / "fixtures" / ("bare_" + name + ".stim")).read_text()
@@ -46,6 +49,7 @@ def test_examples_real_stim_and_matching(name, qubits, detectors, edges):
 
 
 def test_reference_required_and_compatible():
+    """Check that noiseless circuits require a matching noisy reference circuit to build a decoder graph."""
     from qec.surface.circuit import compile_circuit
 
     ideal = str(stim.Circuit(basic()).without_noise())
@@ -60,6 +64,7 @@ def test_reference_required_and_compatible():
 
 
 def test_preflight_rejects_before_stim_parse(monkeypatch):
+    """Ensure preflight limits reject oversized or malformed circuits before calling stim.Circuit."""
     from qec.surface import circuit as rc
 
     limits = rc.Capacities()
@@ -89,6 +94,7 @@ def test_preflight_rejects_before_stim_parse(monkeypatch):
     ],
 )
 def test_nondeterministic_annotations_rejected(circuit):
+    """Ensure compilation rejects detectors or observables that are nondeterministic without noise."""
     from qec.surface.circuit import compile_circuit
 
     with pytest.raises(ValueError, match="deterministic"):
@@ -110,6 +116,7 @@ def test_nondeterministic_annotations_rejected(circuit):
     ],
 )
 def test_unrepresentable_noise_rejected(circuit, message):
+    """Ensure compilation rejects detectorless logical errors, ambiguous observable masks, and nondecomposable hyperedges."""
     from qec.surface.circuit import compile_circuit
 
     with pytest.raises(ValueError, match=message):
@@ -117,6 +124,7 @@ def test_unrepresentable_noise_rejected(circuit, message):
 
 
 def test_capacity_and_zero_probability_terms():
+    """Check that observable capacity limits are enforced and zero-probability noise terms are ignored."""
     from qec.surface.circuit import Capacities, compile_circuit
 
     with pytest.raises(ValueError, match="resource"):
@@ -127,6 +135,7 @@ def test_capacity_and_zero_probability_terms():
 
 
 def test_reference_cannot_drop_actual_faults():
+    """Ensure a reference circuit is rejected if it omits a fault present in the actual circuit."""
     from qec.surface.circuit import compile_circuit
 
     actual = "R 0 1\nX_ERROR(0.1) 0 1\nM 0 1\nDETECTOR rec[-2]\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(0) rec[-2]"
@@ -136,6 +145,7 @@ def test_reference_cannot_drop_actual_faults():
 
 
 def test_repeat_detector_order_and_shifted_coordinates():
+    """Check that REPEAT blocks preserve detector measurement order, tick indices, and shifted coordinates."""
     from qec.surface.circuit import compile_circuit
 
     text = """R 0
@@ -157,6 +167,7 @@ OBSERVABLE_INCLUDE(0) rec[-1]
 
 
 def test_real_decomposition_archived_and_multibit_32():
+    """Check that Stim error decompositions are preserved and observable bit 31 is encoded unsigned."""
     from qec.surface.circuit import compile_circuit
 
     text = """R 0 1 2 3
@@ -184,6 +195,7 @@ OBSERVABLE_INCLUDE(31) rec[-4]
     ],
 )
 def test_feedback_not_claimed(text):
+    """Ensure classical feedback gates controlled by measurement records or sweep bits are rejected."""
     from qec.surface.circuit import compile_circuit
 
     with pytest.raises(ValueError, match="unsupported"):
@@ -191,6 +203,7 @@ def test_feedback_not_claimed(text):
 
 
 def test_record_lookback_is_not_a_physical_qubit_index():
+    """Check that large rec[-N] lookbacks are not miscounted as physical qubit indices."""
     from qec.surface.circuit import compile_circuit
 
     text = (
@@ -204,6 +217,7 @@ def test_record_lookback_is_not_a_physical_qubit_index():
 
 
 def test_expanded_target_budget_catches_mpp_products(monkeypatch):
+    """Ensure unspaced MPP Pauli products count each term toward the preflight target budget."""
     from qec.surface import circuit as rc
 
     def forbidden(*args, **kwargs):
@@ -218,6 +232,7 @@ def test_expanded_target_budget_catches_mpp_products(monkeypatch):
 
 
 def basic():
+    """Return a small two-qubit Stim circuit whose fault flips one detector and two observables."""
     return """QUBIT_COORDS(0, 0) 0
 R 0 1
 H 0
@@ -236,6 +251,7 @@ OBSERVABLE_INCLUDE(1) rec[-2]
 
 
 def test_general_composition_preserves_multibit_mask_and_metadata():
+    """Check that compiled circuit bundles preserve multibit masks, qubit layout, op metadata, and JSON round-trip."""
     from qec.surface.circuit import compile_circuit
 
     bundle = compile_circuit(basic())

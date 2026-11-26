@@ -1,7 +1,14 @@
-"""Reproduce RTL timing sweeps, finite-job queue models and routed resource plots.
+"""Run paired RTL timing sweeps, FIFO backlog models, and routed resource plots.
 
-Requires Stim, PyMatching, NumPy, Matplotlib and Vivado's simulator. All raw
-outputs belong outside the implementation tree; simulator scratch stays in build/.
+Compares the archived baseline RTL against the current optimized RTL on a shared
+10-point rotated Z-memory corpus (d=3 and d=5 across five noise levels). Requires
+Stim, PyMatching, NumPy, Matplotlib, and Vivado's simulator. Raw data is written
+to `--data` (outside the source tree), simulator scratch stays in `build/sim/`,
+and PNG figures are written to `--images`.
+
+Usage:
+    python3 scripts/benchmark_timing.py run --data <new-dir> [--shots 256]
+    python3 scripts/benchmark_timing.py plot --data <existing-dir>
 """
 
 import argparse
@@ -22,19 +29,28 @@ sys.path.insert(0, str(ROOT))
 
 
 def digest(path):
+    """Return the hex SHA-256 hash of a file."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def dump(path, data):
+    """Write JSON formatted with 2-space indentation and a trailing newline."""
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
 def rows(path):
+    """Load a CSV file with headers as a list of row dicts."""
     with path.open() as stream:
         return list(csv.DictReader(stream))
 
 
 def prepare(out, shots, seed):
+    """Generate the 10-point d=3/d=5 Z-memory corpus and reference predictions.
+
+    Samples `shots` syndromes and observable truths per noise point with Stim,
+    runs the Python union-find decoder as a reference, and writes `.stim`
+    circuits, per-workload shot JSONs, `vectors.txt`, and `corpus.json`.
+    """
     import stim
     import pymatching
     from qec.surface.decoder import decode
@@ -83,6 +99,11 @@ def prepare(out, shots, seed):
 
 
 def run(args):
+    """Simulate baseline and optimized RTL on the shared corpus, analyze, and hash outputs.
+
+    Copies archived full-SoC routed reports from `--study` alongside the new
+    simulation results. Does not re-route the design or program a board.
+    """
     out = args.data.resolve()
     out.mkdir(parents=True, exist_ok=False)
     prepare(out, args.shots, args.seed)
@@ -128,7 +149,11 @@ def run(args):
 
 
 def queue(costs, interval):
-    """Finite FIFO, one nonpreemptive server, no trace repetition or graph I/O."""
+    """Simulate a single-server FIFO queue over one pass of job cycle latencies.
+
+    Jobs arrive every `interval` clock cycles and the server becomes free two
+    cycles after each result; graph loading is excluded.
+    """
     free = 0
     result = []
     for i, latency in enumerate(costs):
@@ -141,6 +166,7 @@ def queue(costs, interval):
 
 
 def resource(folder):
+    """Parse routed LUT, FF, BRAM36, and timing slacks from Vivado reports and assert timing closure."""
     utilization = (folder / "qec_soc_utilization.rpt").read_text()
     timing = (folder / "qec_soc_timing_summary.rpt").read_text()
     assert "All user specified timing constraints are met." in timing
@@ -154,6 +180,12 @@ def resource(folder):
 
 
 def analyze(args):
+    """Verify both RTL profiles against the corpus and generate latency, queue, and resource plots.
+
+    Checks that baseline and optimized event traces match identically and that
+    every simulated prediction and cycle sum agrees with the corpus, then writes
+    `summary.json` and PNG figures into `--images`.
+    """
     import numpy as np
     import matplotlib
     matplotlib.use("Agg")
@@ -263,6 +295,7 @@ def analyze(args):
 
 
 def main():
+    """Parse CLI arguments and dispatch to `run` or `plot`."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("run", "plot"))
     parser.add_argument("--data", type=Path, required=True)

@@ -1,4 +1,4 @@
-/* Connect PS UART1 to the same-clock AXI GPIO mailbox. */
+/* Zynq-7000 standalone BSP adapter for PS UART1 and the PL AXI GPIO mailbox. */
 #ifndef QEC_PLATFORM_H
 #define QEC_PLATFORM_H
 
@@ -11,7 +11,7 @@
 #include "xuartps_hw.h"
 #include "xiltimer.h"
 
-/* SDT names the enabled UART1 XUARTPS_0; reject a different address. */
+/* The SDT BSP maps the sole enabled UART (PS UART1) to XUARTPS_0. */
 #if XPAR_XUARTPS_0_BASEADDR != 0xe0001000u
 #error "Runtime firmware requires PS UART1 at 0xe0001000"
 #endif
@@ -19,14 +19,18 @@
 #error "Runtime millisecond deadlines require a counter frequency >= 1000 Hz"
 #endif
 
+/* PS UART1 base address (host serial link). */
 #define QEC_UART_BASE XPAR_XUARTPS_0_BASEADDR
+/* Dual-channel AXI GPIO base address from the Zybo block design. */
 #define QEC_GPIO_BASE 0x41200000u
+/* UART driver instance for initialization; byte I/O hits registers directly. */
 static XUartPs qec_platform_uart;
 
+/* Initialize UART1 at 115200 baud and set AXI GPIO ch1=output, ch2=input. */
 static inline void qec_platform_init(void)
 {
     XUartPs_Config *config = XUartPs_LookupConfig(QEC_UART_BASE);
-    /* Exit silently on UART failure to keep diagnostic text off the binary link. */
+    /* Fail silently rather than printing text onto the binary protocol link. */
     if (config == NULL ||
         XUartPs_CfgInitialize(&qec_platform_uart, config,
                              config->BaseAddress) != 0 ||
@@ -34,34 +38,38 @@ static inline void qec_platform_init(void)
         exit(EXIT_FAILURE);
     }
     XUartPs_SetOperMode(&qec_platform_uart, XUARTPS_OPER_MODE_NORMAL);
-    /* Set GPIO directions without writing control data or creating a request toggle. */
+    /* Configure tri-state directions only, without touching ch1 data/toggle. */
     Xil_Out32(QEC_GPIO_BASE + 4u, 0u);
     Xil_Out32(QEC_GPIO_BASE + 12u, UINT32_MAX);
 }
 
+/* Write the 32-bit mailbox ctrl word (with REQ toggle) to GPIO channel 1. */
 static inline void qec_platform_write_control(void *ignored, uint32_t value)
 {
     (void)ignored;
     Xil_Out32(QEC_GPIO_BASE, value);
 }
 
+/* Read the 32-bit mailbox status word (ACK/DONE/ERROR/READ_DATA) from channel 2. */
 static inline uint32_t qec_platform_read_status(void *ignored)
 {
     (void)ignored;
     return Xil_In32(QEC_GPIO_BASE + 8u);
 }
 
+/* Convert the 64-bit global timer to a wrapping 32-bit millisecond count. */
 static inline uint32_t qec_platform_now_ms(void *ignored)
 {
     XTime ticks;
     (void)ignored;
-    /* Split ticks before scaling to avoid overflow; unsigned milliseconds wrap. */
+    /* Divide seconds and remainder separately so multiplying by 1000 cannot overflow. */
     XTime_GetTime(&ticks);
-    /* Parenthesize the BSP CPU_HZ/2 macro before division. */
+    /* Parenthesize COUNTS_PER_SECOND because the BSP defines it as CPU_HZ/2. */
     return (uint32_t)(ticks / (COUNTS_PER_SECOND)) * 1000u +
            (uint32_t)((ticks % (COUNTS_PER_SECOND)) * 1000u / (COUNTS_PER_SECOND));
 }
 
+/* Non-blocking UART read: returns 0..255 or -1 if the RX FIFO is empty. */
 static inline int qec_platform_read_byte(void)
 {
     if (!XUartPs_IsReceiveData(QEC_UART_BASE)) {
@@ -70,6 +78,7 @@ static inline int qec_platform_read_byte(void)
     return (int)(uint8_t)XUartPs_ReadReg(QEC_UART_BASE, XUARTPS_FIFO_OFFSET);
 }
 
+/* Transmit a full reply frame and wait until the UART shifter has drained. */
 static inline void qec_platform_emit(void *ignored, const uint8_t *data,
                                      size_t length)
 {
@@ -77,7 +86,7 @@ static inline void qec_platform_emit(void *ignored, const uint8_t *data,
     for (size_t i = 0; i < length; ++i) {
         XUartPs_SendByte(QEC_UART_BASE, data[i]);
     }
-    /* Wait for both the FIFO and transmitter to drain. */
+    /* Wait for both TX FIFO and active shift register to empty. */
     while (!XUartPs_IsTransmitFifoEmpty(QEC_UART_BASE) ||
            XUartPs_IsTransmitActive(QEC_UART_BASE)) {
     }

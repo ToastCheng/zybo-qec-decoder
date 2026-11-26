@@ -1,4 +1,4 @@
-"""Capture real UART transactions; no software decoder participates in decisions."""
+"""Run the fixed d3/r3 Z-memory vector suite on a connected Zybo Z7-10 over UART."""
 import argparse
 import hashlib
 import json
@@ -15,9 +15,10 @@ GRAPH_SHA256 = "612138bcfd40ea7e4aae8e706215afc00944fe6811d1b4d3f951b9f747e22524
 
 
 class FixedMatching(GraphDecoder):
-    """Opt in to the immutable graph; normal UF host rejects this protocol."""
+    """UART host client for the 0xd303 fixed d3/r3 Z-memory matching bitstream."""
 
     def identity(self):
+        """Query metadata, verify version 0xd303 (24/78/1), and return DecoderIdentity."""
         payload = self._transact(1)
         if len(payload) != 60:
             raise ProtocolError("matching identity width")
@@ -26,11 +27,16 @@ class FixedMatching(GraphDecoder):
             raise ProtocolError("not the fixed d3/r3 exact matching image")
         if any(value > 65535 for value in words):
             raise ProtocolError("matching metadata range")
-        # Existing framing/generation checks are reused only after explicit opt-in.
+        # Map version 0xd303 to 2 so GraphDecoder's shared framing checks apply.
         return DecoderIdentity((2,) + words[1:])
 
 
 def read_vectors(path, real_shots):
+    """Parse board replay vectors and check the real vs synthetic shot split.
+
+    Returns tuples of (syndrome, cost, matching_pred, uf_pred, error, truth).
+    The first real_shots rows must carry binary truth (0/1); synthetic rows use -1.
+    """
     lines = path.read_text().splitlines()
     if not lines or int(lines[0]) != len(lines) - 1 or not 0 < real_shots <= len(lines) - 1:
         raise ValueError("vector count / real population")
@@ -47,6 +53,12 @@ def read_vectors(path, real_shots):
 
 
 def main():
+    """Replay the frozen-graph vectors on the board and archive results and wire logs.
+
+    Verifies graph.json's SHA-256, checks (for matching) that a tampered edge
+    mask is rejected in PL, replays every shot verifying predictions and exact
+    cycle counts, and writes wire.json even if an assertion fails.
+    """
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument("--decoder", choices=("uf", "matching"), required=True)
     parser.add_argument("--vectors", type=Path, required=True)
@@ -68,7 +80,7 @@ def main():
         try:
             initial = list(board.identity().words)
             if args.decoder == "matching":
-                # Same-size wrong mask must fail in PL and leave decoding disarmed.
+                # Confirm the identity gate rejects a flipped observable mask and stays disarmed.
                 wrong = list(edges)
                 a, b, m = wrong[10]
                 wrong[10] = (a, b, m ^ 1)

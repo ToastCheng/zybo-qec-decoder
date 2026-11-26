@@ -1,4 +1,8 @@
 `timescale 1ns/1ps
+// Testbench for the programmable parity-frontier qec_decoder.
+// Checks poisoned-upload rejection, hardware program CRC, exact costs,
+// predictions, cycle counts, and output hold stability across miniature,
+// real d3, and real d5 programs, plus mid-decode shot_abort recovery.
 module tb_frontier;
     logic clk = 0;
     always #5 clk = !clk;
@@ -20,9 +24,12 @@ module tb_frontier;
     logic [63:0] weight, expected_cost;
     logic [71:0] shot;
     logic [31:0] expected_crc;
+    // Advance one clock and sample 1 ns later so DUT register updates settle.
     task tick;
         @(posedge clk); #1;
     endtask
+    // Wait for cfg_ack (allowing for the 10-cycle per-record CRC pass) and
+    // verify cfg_error matches expect_error.
     task wait_cfg(input bit expect_error);
         timeout_count = 0;
         while (!cfg_ack) begin
@@ -31,6 +38,9 @@ module tb_frontier;
         end
         if (cfg_error != expect_error) $fatal(1, "unexpected cfg_error=%0d want=%0d", cfg_error, expect_error);
     endtask
+    // Upload count DP operations from handle (two cfg_write records per op for
+    // the 64-bit weight), commit, verify program_crc, and replay vectors shots
+    // checking exact cost, prediction, cycle count, and held output stability.
     task run_program(input integer handle, input integer vectors, input bit hex_syndrome);
         for (i = 0; i < count; i = i + 1) begin
             parsed = $fscanf(handle, "%h %h %h", a, b, weight);
@@ -72,7 +82,7 @@ module tb_frontier;
     initial begin
         repeat(2) tick();
         @(negedge clk); rst = 0;
-        // Poisoned zero-mask record must fail commit and leave decode disarmed.
+        // A zero-mask record must fail write and poison commit, leaving decode disarmed.
         cfg_detector_count = 3; cfg_edge_count = 2; cfg_begin = 1;
         tick(); @(negedge clk); cfg_begin = 0; wait_cfg(0);
         cfg_edge_index = 0; cfg_endpoint_a = 0; cfg_endpoint_b = 0; cfg_observable_mask = 1;
@@ -97,7 +107,7 @@ module tb_frontier;
             run_program(g, shots, 1);
         end
         $fclose(g);
-        // Abort an in-flight d5 decode while preserving the loaded program.
+        // Abort an in-flight all-ones d5 decode; the loaded program must stay configured.
         @(negedge clk); syndrome = 72'hffffffffffffffffff; in_valid = 1;
         tick(); @(negedge clk); in_valid = 0;
         repeat(40) tick();

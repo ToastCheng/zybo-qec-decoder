@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-"""Sample real Stim memories and compare ordered UF with weighted PyMatching.
+"""Benchmark ordered union-find against weighted PyMatching on Stim memory circuits.
 
-Run from any directory; no serial connection or board programming is performed.
+Sweeps rotated X and Z surface-code memory circuits at distances 3 and 5 across a
+grid of physical noise rates, decoding shared Stim shots in software (no FPGA or
+serial connection is used). Writes circuits, DEMs, graphs, compressed shot arrays,
+`results.csv`, plots, `metadata.json`, and `sha256.json` into a new output directory.
+
+Usage:
+    python3 scripts/benchmark_accuracy.py --output <new-dir> [--shots 30000]
+
 See docs/benchmark-accuracy.md for the experiment contract.
 """
 
@@ -36,7 +43,7 @@ from qec.surface.decoder import decode
 
 
 def binomial_interval(failures, shots):
-    """Two-sided 95% Clopper-Pearson interval, including exact endpoints."""
+    """Return the exact two-sided 95% Clopper-Pearson confidence interval."""
     if not 0 <= failures <= shots or shots <= 0:
         raise ValueError("require 0 <= failures <= shots and positive shots")
     low = 0.0 if failures == 0 else float(beta.ppf(.025, failures, shots - failures + 1))
@@ -45,7 +52,7 @@ def binomial_interval(failures, shots):
 
 
 def plot_results(rows, output, *, include_mwpm=True):
-    """Draw per-shot failure probabilities; zero estimates use upper-limit markers."""
+    """Plot per-shot logical failure rates to PNG and SVG, marking zero-failure points with upper bounds."""
     plt.rcParams.update({"font.size": 11, "axes.spines.top": False,
                          "axes.spines.right": False, "svg.fonttype": "none"})
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.3), sharey=True)
@@ -86,6 +93,12 @@ def plot_results(rows, output, *, include_mwpm=True):
 
 
 def main():
+    """Run the X/Z memory noise sweep and archive all paired software results.
+
+    Snapshots source files and git metadata, samples shared Stim shots across
+    each basis/distance/noise point, runs both decoders, and writes raw shots,
+    failure-rate tables, plots, and SHA-256 checksums to `--output`.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True,
                         help="New raw-results directory (must not already exist)")
@@ -105,6 +118,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     output = args.output.resolve()
     start = time.perf_counter()
+    # Query git from the repo root so the script works from any working directory.
     git = lambda *cmd: subprocess.check_output(["git", "-C", str(ROOT), *cmd], text=True)
     metadata = {
         "schema_version": 1, "utc_started": datetime.now(timezone.utc).isoformat(),

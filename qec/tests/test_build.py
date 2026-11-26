@@ -1,4 +1,4 @@
-"""Test build paths and failure handling with Tcl and Vitis command doubles."""
+"""Tests for Vivado Tcl build/status scripts, Vitis build orchestration, and RTL top-level wiring."""
 
 import os
 import runpy
@@ -22,6 +22,7 @@ def run_build(
     progress="100%",
     capacities=(64, 256, 8),
 ):
+    """Run fpga/scripts/build.tcl under tclsh with stubbed Vivado commands and configurable timing/progress."""
     output = output or tmp_path / "image"
     harness = tmp_path / "harness.tcl"
     harness.write_text(r"""
@@ -78,6 +79,7 @@ source $build
 
 
 def test_qec_build_isolated_sources_reports_and_export(tmp_path):
+    """Check that build.tcl targets Zybo Z7-10, compiles the QEC RTL, runs reports, and exports XSA/bitstream."""
     result = run_build(tmp_path)
     assert result.returncode == 0, result.stderr
     log = result.stdout
@@ -117,6 +119,7 @@ def test_qec_build_isolated_sources_reports_and_export(tmp_path):
     ],
 )
 def test_failed_or_missing_timing_never_exports(tmp_path, setup, hold, progress):
+    """Ensure build.tcl aborts before exporting hardware if implementation is incomplete or timing fails."""
     result = run_build(tmp_path, setup=setup, hold=hold, progress=progress)
     assert result.returncode != 0
     assert "CALL write_hw_platform" not in result.stdout
@@ -124,6 +127,7 @@ def test_failed_or_missing_timing_never_exports(tmp_path, setup, hold, progress)
 
 
 def test_existing_directory_is_not_overwritten(tmp_path):
+    """Ensure build.tcl refuses to overwrite a nonempty output directory."""
     image = tmp_path / "existing"
     image.mkdir()
     sentinel = image / "surface_soc.bit"
@@ -135,6 +139,7 @@ def test_existing_directory_is_not_overwritten(tmp_path):
 
 
 def test_top_forwards_capacity_clock_reset_and_mailbox():
+    """Check that top_qec_soc.sv forwards capacity parameters, wires clock/reset/mailbox, and matches XDC pins."""
     top = (ROOT / "fpga/rtl/top/top_qec_soc.sv").read_text()
     for parameter, default in [
         ("MAX_DETECTORS", 128),
@@ -161,9 +166,11 @@ def test_top_forwards_capacity_clock_reset_and_mailbox():
 
 
 def fake_vitis(monkeypatch, *, export_platform=True, export_elf=True):
+    """Monkeypatch an in-memory Vitis module that logs build calls and creates dummy exports."""
     events = []
 
     class Component:
+        """Fake Vitis platform or application component."""
         def __init__(self, name, client):
             self.name = name
             self.client = client
@@ -187,6 +194,7 @@ def fake_vitis(monkeypatch, *, export_platform=True, export_elf=True):
             events.append(("import", kwargs))
 
     class Client:
+        """Fake Vitis client implementing workspace and component creation."""
         def set_workspace(self, path):
             self.workspace = Path(path)
             events.append(("workspace", path))
@@ -209,12 +217,13 @@ def fake_vitis(monkeypatch, *, export_platform=True, export_elf=True):
 
 
 def test_vitis_qec_build_uses_isolated_root_relative_paths(tmp_path, monkeypatch):
+    """Check that Vitis resolves relative QEC_IMAGE_DIR from the repo root and strips helloworld.c from CMake."""
     image = tmp_path / "image"
     image.mkdir()
     (image / "qec_soc.xsa").touch()
     events = fake_vitis(monkeypatch)
     monkeypatch.chdir(tmp_path)
-    # Resolve relative image paths against the repository, regardless of cwd.
+    # Relative QEC_IMAGE_DIR must resolve from the repo root even when cwd differs.
     monkeypatch.setenv("QEC_IMAGE_DIR", os.path.relpath(image, ROOT))
     runpy.run_path(str(ROOT / "fpga/vitis/build.py"), run_name="__main__")
     assert ("workspace", str(image / "vitis_ws")) in events
@@ -241,6 +250,7 @@ def test_vitis_qec_build_uses_isolated_root_relative_paths(tmp_path, monkeypatch
     "capacities", [(0, 256, 8), (64, -1, 8), (64, 256, 33), ("oops", 256, 8)]
 )
 def test_invalid_capacities_fail_before_creating_project(tmp_path, capacities):
+    """Ensure build.tcl rejects invalid detector, edge, or observable capacities before creating a project."""
     result = run_build(tmp_path, capacities=capacities)
     assert result.returncode != 0
     assert "Invalid decoder capacity" in result.stderr
@@ -249,12 +259,14 @@ def test_invalid_capacities_fail_before_creating_project(tmp_path, capacities):
 
 @pytest.mark.parametrize("output", [ROOT, ROOT / "build", ROOT / "vitis", ROOT.parent])
 def test_protected_output_directories_are_rejected(tmp_path, output):
+    """Ensure build.tcl refuses to write directly into protected directories like repo root or build/."""
     result = run_build(tmp_path, output=output)
     assert result.returncode != 0
     assert "CALL create_project" not in result.stdout
 
 
 def test_existing_empty_output_directory_is_allowed(tmp_path):
+    """Check that build.tcl succeeds when given an existing but empty output directory."""
     output = tmp_path / "image"
     output.mkdir()
     assert run_build(tmp_path, output=output).returncode == 0
@@ -267,6 +279,7 @@ def test_existing_empty_output_directory_is_allowed(tmp_path):
 def test_vitis_missing_exports_cannot_report_success(
     tmp_path, monkeypatch, capsys, export_platform, export_elf, error
 ):
+    """Ensure the Vitis build raises an error if either the platform export or application ELF is missing."""
     (tmp_path / "qec_soc.xsa").touch()
     fake_vitis(monkeypatch, export_platform=export_platform, export_elf=export_elf)
     monkeypatch.setenv("QEC_IMAGE_DIR", str(tmp_path))
@@ -279,6 +292,7 @@ def test_vitis_missing_exports_cannot_report_success(
 def test_vitis_preflight_does_not_touch_vendor_on_invalid_input(
     tmp_path, monkeypatch, existing_workspace
 ):
+    """Ensure Vitis preflight rejects a missing XSA or nonempty workspace before calling Vitis APIs."""
     if existing_workspace:
         (tmp_path / "qec_soc.xsa").touch()
         workspace = tmp_path / "vitis_ws"
@@ -295,6 +309,7 @@ def test_vitis_preflight_does_not_touch_vendor_on_invalid_input(
 
 
 def test_board_repository_relative_path_resolves_from_root(tmp_path, monkeypatch):
+    """Check that a relative QEC_BOARD_REPO path resolves against the repository root."""
     board_repo = tmp_path / "boards"
     board_repo.mkdir()
     monkeypatch.setenv("QEC_BOARD_REPO", os.path.relpath(board_repo, ROOT))
@@ -305,6 +320,7 @@ def test_board_repository_relative_path_resolves_from_root(tmp_path, monkeypatch
 
 @pytest.mark.parametrize("directory", [ROOT, ROOT / "fpga", ROOT / "build"])
 def test_simulator_rejects_outputs_outside_private_sim_directory(directory):
+    """Ensure simulate.py rejects build directories outside build/sim before invoking Vivado."""
     result = subprocess.run(
         [
             sys.executable,
@@ -325,6 +341,7 @@ def test_simulator_rejects_outputs_outside_private_sim_directory(directory):
 
 
 def test_status_reads_configuration_without_programming(tmp_path):
+    """Check that status.tcl refreshes and reports FPGA properties without programming the device."""
     harness = tmp_path / "status.tcl"
     harness.write_text(
         'proc unknown {command args} {puts "CALL $command $args"; return device}\n'

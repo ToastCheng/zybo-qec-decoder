@@ -1,6 +1,12 @@
 `timescale 1ns/1ps
-// Exact frozen-graph T-join: all 32 parity states advance in parallel.
-// Edge order, lossless 60-bit weights and skip-on-tie policy are unchanged.
+// Fixed-graph exact minimum-weight T-join (matching) core for the d3/r3
+// Z-memory code (24 detectors, 102 compiled DP ops, frontier width 5 -> 32
+// parity states).
+//
+// All 32 states live in flip-flops and update in parallel through a 5-stage
+// XOR butterfly, using frozen 60-bit integer weights from ops.svh (strictly
+// positive; ties prefer leaving the edge out). Nonzero syndromes take 512
+// cycles (1 INIT + 102 * 5 pipeline cycles + 1 FINAL_LATCH); zero takes 1.
 module matching_exact (
     input logic clk,
     input logic rst,
@@ -28,10 +34,14 @@ module matching_exact (
     logic [59:0] weight;
     `include "ops.svh"
 
-    // One register frontier avoids multiport RAM conflicts. The butterfly
-    // permutation maps s to s XOR mask using five layers of 2:1 switches.
-    // For forgetting a detector only s&mask==0 survives, so XOR also implements
-    // its required OR-source selection; other output states are invalidated.
+    // All 32 frontier entries ({cost[59:0], observable_parity}) sit in FFs so
+    // every state updates in parallel with no RAM port limits.
+    //
+    // A 5-stage 2:1 mux butterfly computes entries[s ^ permutation] for all 32
+    // states combinationally. For edge ops (kind=0), permutation=mask fetches
+    // the toggled-parity partner. For forget ops (kind=1), only states with
+    // (s & mask)==0 survive (others become INF), so XOR with (shot[det] ? mask
+    // : 0) selects s|mask when the detector fired and s when it did not.
     logic [60:0] entries [0:STATES-1];
     wire [60:0] permuted [0:5][0:STATES-1];
     wire [4:0] permutation = kind ? (shot[detector] ? mask : 5'd0) : mask;
@@ -49,9 +59,10 @@ module matching_exact (
                 : permuted[bit_index][s];
         end
         always_ff @(posedge clk) begin
-            // No memory reset is needed: every nonempty computation initializes
-            // the complete frontier. Empty syndrome has the unique empty optimum
-            // because every frozen edge weight is strictly positive.
+            // INIT resets all 32 states before every nonzero decode. The 60-bit
+            // cost add is split across ADD_LOW/ADD_HIGH (30 bits + carry each)
+            // for timing closure; empty syndromes skip straight to ZERO_RESULT
+            // because all weights in ops.svh are strictly positive.
             case (state)
                 INIT: entries[s] <= s == 0 ? 61'd0 : {INF, 1'b0};
                 PERMUTE: begin
@@ -89,8 +100,8 @@ module matching_exact (
             cost <= 0;
             cycles <= 0;
         end else begin
-            // Real hardware timestamp: count every edge after acceptance and
-            // stop at final observable availability, excluding held retirement.
+            // Count active decode cycles from acceptance through FINAL_LATCH,
+            // stopping once HOLD asserts out_valid.
             if (state != IDLE && state != HOLD)
                 cycles <= cycles + 1;
             case (state)

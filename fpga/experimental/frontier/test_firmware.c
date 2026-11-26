@@ -1,14 +1,18 @@
-/* Native parser/GPIO checks for the experimental 17-word frontier metadata. */
+/* Host unit test for the frontier firmware parser and 17-word 0xd505 metadata. */
 #define QEC_NATIVE 1
 #include "firmware/main.c"
 #include <assert.h>
 #include <stdio.h>
 
+/* Mock d5 metadata: version 0xd505, 72 detectors, and program CRC in words 15..16. */
 static uint16_t metadata[17] = {0xd505, 128, 1024, 1, 72, 700, 1, 1, 3, 0, 1, 0, 100, 0, 0, 0xb1c2, 0xd438};
+/* Captured reply bytes from the most recent frame. */
 static uint8_t reply[521];
 static size_t reply_length;
+/* When nonzero, flip a program CRC bit during decode to test tamper rejection. */
 static int tamper_crc;
 
+/* Mock PL mailbox serving the metadata array and optional mid-decode CRC tamper. */
 static int mailbox(void *user, uint8_t op, uint8_t index, uint16_t data, uint16_t *value)
 {
     (void)user;
@@ -24,6 +28,7 @@ static int mailbox(void *user, uint8_t op, uint8_t index, uint16_t data, uint16_
     return 0;
 }
 
+/* Capture the parser's emitted reply frame for test assertions. */
 static void emit(void *user, const uint8_t *data, size_t length)
 {
     (void)user;
@@ -31,6 +36,7 @@ static void emit(void *user, const uint8_t *data, size_t length)
     reply_length = length;
 }
 
+/* Build a CRC-valid 0xd4 request, feed it byte-by-byte, and check the 0x4d header. */
 static void send_frame(qec_parser *parser, uint8_t seq, uint8_t op, const uint8_t *payload, uint16_t length)
 {
     uint8_t frame[521] = {0xd4, seq, op, length & 255, length >> 8};
@@ -45,6 +51,7 @@ static void send_frame(qec_parser *parser, uint8_t seq, uint8_t op, const uint8_
     assert(reply_length >= 9 && reply[0] == 0x4d && reply[1] == seq);
 }
 
+/* Verify 17-word metadata readback, a 72-detector decode, and CRC-change rejection. */
 int main(void)
 {
     qec_parser parser;

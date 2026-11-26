@@ -1,4 +1,4 @@
-"""Initial circuit inputs are generated without serial access."""
+"""Tests for EditorLab preset metadata and serial-free initial layout generation."""
 
 import stim
 
@@ -6,6 +6,7 @@ from qec.surface.engine import EditorLab
 
 
 def test_known_encoded_example_has_verified_logical_metadata(monkeypatch):
+    """Check that mapping_verified is true only when logical_circuit matches the registered preset."""
     from qec.surface import encoded
 
     entry = {
@@ -39,6 +40,7 @@ def test_known_encoded_example_has_verified_logical_metadata(monkeypatch):
 
 
 def test_memory_layout_supplies_editable_base_and_reference(monkeypatch):
+    """Check that EditorLab.layout() builds the ideal memory circuit, noisy reference, and presets without serial I/O."""
     def no_serial(*args, **kwargs):
         raise AssertionError("Opening the circuit editor must not open serial")
 

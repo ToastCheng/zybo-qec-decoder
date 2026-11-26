@@ -1,13 +1,16 @@
+/**
+ * Unit tests for custom circuit editor controls, request builders, and SVG
+ * diagram helpers in qec/surface/web_assets/app.js and index.html.
+ *
+ * Runs purely in Node without a browser or web server.
+ */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const app = require("../surface/web_assets/app.js");
 
-/**
- * Check the shipped HTML for separate circuit and noise controls, including the
- * collapsed Advanced editor.
- */
+// Verify index.html keeps circuit selection and the collapsed Advanced editor separate from noise inputs.
 test("circuit dropdown and Advanced editor stay separate from noise parameters", () => {
   const html = fs.readFileSync(
     path.join(__dirname, "../surface/web_assets/index.html"),
@@ -34,10 +37,7 @@ test("circuit dropdown and Advanced editor stay separate from noise parameters",
   assert.doesNotMatch(html, /Supported circuit/);
 });
 
-/**
- * Require request settings to preserve Stim text and distinguish a blank
- * reference from an explicit one; reject invalid settings.
- */
+// Verify circuitSettings keeps Stim text intact, converts blank references to null, and rejects invalid inputs.
 test("custom circuit settings preserve annotated Stim and explicit nullable reference", () => {
   const text = "R 0\nTICK\nM 0\nDETECTOR rec[-1]\n";
   assert.deepEqual(app.circuitSettings(text, "", 42, 0.002), {
@@ -52,10 +52,7 @@ test("custom circuit settings preserve annotated Stim and explicit nullable refe
   assert.throws(() => app.circuitSettings(text, "", 1, 1), /0.*0.75/);
 });
 
-/**
- * Check that cycle text distinguishes a multi-chunk total from a single decode
- * and preserves zero.
- */
+// Verify multi-chunk FPGA cycle totals are labeled separately from single-decode and zero counts.
 test("chunked hardware cycles are labeled as summed core cycles, excluding uploads", () => {
   assert.equal(
     app.cycleSummary({ hardware: { cycles: 123, chunks: [{}, {}] } }),
@@ -68,10 +65,7 @@ test("chunked hardware cycles are labeled as summed core cycles, excluding uploa
   assert.equal(app.cycleSummary({ cycles: 0 }), "0");
 });
 
-/**
- * Require custom Run settings to copy the fault records rather than retain caller
- * aliases.
- */
+// Verify circuitSettings clones fault entries instead of sharing references with caller state.
 test("custom circuit settings copy injected faults without mutating caller state", () => {
   const faults = [{ tick: 1, qubit: 0, pauli: "Y" }];
   const settings = app.circuitSettings("R 0\nTICK\nM 0", "", 4, 0, "", faults);
@@ -79,10 +73,7 @@ test("custom circuit settings copy injected faults without mutating caller state
   assert.notEqual(settings.faults[0], faults[0]);
 });
 
-/**
- * Check that only the memory-style replay adds a host correction position after
- * the last physical tick.
- */
+// Verify hostOverlay=false stops replay at the final physical tick, unlike the memory-code default.
 test("generic replay ends at the last physical tick without a fabricated correction", () => {
   const state = new app.LabState(2, false);
   state.seek(100);
@@ -91,10 +82,7 @@ test("generic replay ends at the last physical tick without a fabricated correct
   assert.equal(new app.LabState(21).endTick, 22);
 });
 
-/**
- * Check that pair grouping preserves classical feedback operands and
- * Pauli-product grouping preserves bases.
- */
+// Verify pair gates keep classical feedback records and MPP products keep Pauli bases per group.
 test("typed product and pair targets retain grouping, bases and feedback records", () => {
   assert.deepEqual(
     app.productGroups({
@@ -124,10 +112,7 @@ test("typed product and pair targets retain grouping, bases and feedback records
   );
 });
 
-/**
- * Check coordinate spacing where complete geometry is supplied and keep all 1024
- * IDs in the index-grid fallback.
- */
+// Verify physicalGrid honors complete 2D coordinates and falls back to a full 1024-qubit index grid.
 test("all physical qubits keep their actual geometry or an explicit index grid", () => {
   const dense = Array.from({ length: 1024 }, (_, id) => ({ id }));
   const grid = app.physicalGrid(dense);
@@ -150,10 +135,7 @@ test("all physical qubits keep their actual geometry or an explicit index grid",
   );
 });
 
-/**
- * Check circuit view markup and SVG wires for physical input, multi-pair gates
- * and feedback without claiming a logical mapping.
- */
+// Verify circuit-view HTML IDs and SVG wire rendering for multi-pair CX gates, feedback, and 1024 wires.
 test("circuit view accompanies the physical grid without inventing logical metadata", () => {
   const html = fs.readFileSync(
     path.join(__dirname, "../surface/web_assets/index.html"),
@@ -222,10 +204,7 @@ test("circuit view accompanies the physical grid without inventing logical metad
   assert.equal((large.match(/class="circuit-wire"/g) || []).length, 1024);
 });
 
-/**
- * Check that the display parser expands a small repeat, keeps its gates, and
- * rejects oversized output.
- */
+// Verify suppliedDiagram expands REPEAT blocks for display and rejects oversized output.
 test("supplied logical text keeps gates and explicit repeat structure", () => {
   const parsed = app.suppliedDiagram(
     "R 0 1\nREPEAT 2 {\nH 0\nCX 0 1\nTICK\n}\nM 0 1",
@@ -242,10 +221,7 @@ test("supplied logical text keeps gates and explicit repeat structure", () => {
   assert.throws(() => app.suppliedDiagram("REPEAT 999999 {\nH 0\n}"), /large/);
 });
 
-/**
- * Check the high bit of an unsigned mask and verify that its low bit remains
- * unset.
- */
+// Verify maskBit reads bit 31 accurately without signed 32-bit shift truncation.
 test("unsigned detector bit 31 is read without signed mask truncation", () => {
   assert.equal(app.maskBit(2147483648, 31), 1);
   assert.equal(app.maskBit(2147483648, 0), 0);

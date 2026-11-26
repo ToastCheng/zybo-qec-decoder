@@ -1,4 +1,17 @@
-"""Exchange D4/4D version-2 frames over an exclusive serial port."""
+"""UART host driver for the FPGA decoder's D4/4D version-2 serial protocol.
+
+Handles exclusive serial access, CRC32 framing, graph uploads with readback
+verification, and per-shot hardware decoding for ``run.py`` and
+``partition.py``.
+
+Wire frame layout (little-endian):
+- Header (5 bytes, ``<BBBH``): magic (``0xD4`` host request, ``0x4D`` device
+  reply), wrapping 8-bit sequence number, request opcode or reply status byte
+  (``0`` means OK), and uint16 payload length (at most 512 bytes).
+- Payload: 0 to 512 bytes.
+- Trailer (4 bytes, ``<I``): IEEE CRC32 over the header (including magic) and
+  payload.
+"""
 
 import os
 import struct
@@ -12,7 +25,13 @@ import serial
 
 
 def encode_frame(magic, seq, code, payload=b""):
-    """Protect the header and payload with IEEE CRC32, including the magic byte."""
+    """Build a CRC32-protected protocol frame from header fields and payload.
+
+    Packs ``(magic, seq, code, len(payload))`` as ``<BBBH``, appends
+    ``payload``, and finishes with a little-endian IEEE CRC32 over the full
+    header (including ``magic``) and payload. Raises ``ValueError`` if
+    ``payload`` exceeds 512 bytes.
+    """
     if len(payload) > 512:
         raise ValueError("payload exceeds 512 bytes")
     data = struct.pack("<BBBH", magic, seq, code, len(payload)) + payload
@@ -20,9 +39,15 @@ def encode_frame(magic, seq, code, payload=b""):
 
 
 class ProtocolError(IOError):
-    """Retain request and response bytes when a transaction fails."""
+    """Raised when a UART transaction fails framing, CRC, status, or readback checks.
+
+    Carries the raw ``tx`` and ``rx`` wire bytes captured during the exchange
+    along with any nonzero device ``status`` byte so callers and archives can
+    inspect what happened on the wire.
+    """
 
     def __init__(self, message, tx=b"", rx=b"", status=None):
+        """Attach captured request/response bytes and an optional device status."""
         super().__init__(message)
         self.tx = tx
         self.rx = rx
@@ -31,30 +56,74 @@ class ProtocolError(IOError):
 
 @dataclass(frozen=True)
 class DecoderIdentity:
-    """Expose PL capacities, graph dimensions and generation from identity words."""
+    """Parsed view of the 15 metadata words returned by the IDENTITY command.
+
+    Exposes both the fixed FPGA image capacities (``max_detectors``,
+    ``max_edges``, ``max_observables``) and the state of the currently loaded
+    graph (``detectors``, ``edges``, ``observables``, ``valid``, and the 32-bit
+    ``generation`` counter).
+    """
 
     words: tuple
 
-    protocol = property(lambda self: self.words[0])
-    max_detectors = property(lambda self: self.words[1])
-    max_edges = property(lambda self: self.words[2])
-    max_observables = property(lambda self: self.words[3])
-    detectors = property(lambda self: self.words[4])
-    edges = property(lambda self: self.words[5])
-    observables = property(lambda self: self.words[6])
-    valid = property(lambda self: bool(self.words[7]))
-    generation = property(lambda self: self.words[8] | self.words[9] << 16)
+    protocol = property(
+        lambda self: self.words[0],
+        doc="Protocol metadata version reported by the runtime image.",
+    )
+    max_detectors = property(
+        lambda self: self.words[1],
+        doc="Maximum detector count the FPGA image supports, excluding the boundary.",
+    )
+    max_edges = property(
+        lambda self: self.words[2],
+        doc="Maximum number of ordered edges the FPGA image supports.",
+    )
+    max_observables = property(
+        lambda self: self.words[3], doc="Maximum logical observable width in bits."
+    )
+    detectors = property(
+        lambda self: self.words[4], doc="Detector count of the currently loaded graph."
+    )
+    edges = property(
+        lambda self: self.words[5], doc="Edge count of the currently loaded graph."
+    )
+    observables = property(
+        lambda self: self.words[6],
+        doc="Logical observable width in bits of the currently loaded graph.",
+    )
+    valid = property(
+        lambda self: bool(self.words[7]),
+        doc="Whether the device reports a valid committed graph.",
+    )
+    generation = property(
+        lambda self: self.words[8] | self.words[9] << 16,
+        doc="32-bit graph generation counter assembled from low and high 16-bit words.",
+    )
 
 
 @dataclass(frozen=True)
 class DecoderReply:
+    """Decoded result returned for a single FPGA shot.
+
+    Holds the logical observable bitmask (``prediction``), the measured FPGA
+    core cycle count (``cycles``), and the device's ``decode_error`` flag.
+    ``GraphDecoder.decode`` raises ``ProtocolError`` whenever ``decode_error``
+    is set instead of returning a failed reply.
+    """
+
     prediction: int
     cycles: int
     decode_error: bool
 
 
 def serial_lock_owner(port, directories=(Path("/run/lock"), Path("/var/lock"))):
-    """Report a live serial-monitor lock without changing its file."""
+    """Return the PID of a live process holding a UUCP lock file for ``port``.
+
+    Checks ``LCK..<name>`` under ``directories`` for both the given port name
+    and its resolved symlink target without modifying any lock files. Uses
+    ``os.kill(pid, 0)`` to check liveness (treating ``PermissionError`` as alive
+    under another user) and returns ``None`` if no live lock is found.
+    """
     names = {Path(port).name, Path(port).resolve().name}
     for directory in directories:
         for name in names:
@@ -74,9 +143,19 @@ def serial_lock_owner(port, directories=(Path("/run/lock"), Path("/var/lock"))):
 
 
 class GraphDecoder:
-    """Upload ordered graphs and decode shots without software fallback."""
+    """Thread-safe UART client for uploading graphs and decoding shots on the FPGA.
+
+    Talks directly to the runtime image over an exclusive serial port with no
+    silent fallback to software decoding.
+    """
 
     def __init__(self, port, *, baudrate=115200, timeout=1.0):
+        """Open ``port`` exclusively after verifying no live serial monitor holds it.
+
+        ``timeout`` sets the per-transaction deadline in seconds and must be
+        positive. No graph is loaded on open; callers must call ``load_graph``
+        before ``decode``.
+        """
         if timeout <= 0:
             raise ValueError("timeout must be positive")
         owner = serial_lock_owner(port)
@@ -100,18 +179,30 @@ class GraphDecoder:
         )
 
     def close(self):
+        """Close the serial port and forget the cached graph identity."""
         with self._lock:
             self._serial.close()
             self._loaded = None
 
     def __enter__(self):
+        """Return this decoder (the serial port is opened during ``__init__``)."""
         return self
 
     def __exit__(self, *exc):
+        """Close the serial port without suppressing exceptions."""
         self.close()
 
     def resynchronize(self, *, timeout=None):
-        """Consume the outstanding reply before permitting another request."""
+        """Drain and validate an in-flight reply before allowing new requests.
+
+        When an earlier transaction times out or fails mid-frame, the device
+        may still finish transmitting its reply afterward; sending another
+        request immediately would mix stale bytes into the next response and
+        desynchronize sequence numbers. This method finishes reading the
+        pending reply frame, verifies its ``0x4D`` magic, matching sequence
+        number, and CRC32, records the drained bytes in ``resync_rx``, and
+        clears the pending block. It does nothing when no reply is pending.
+        """
         timeout = self.timeout if timeout is None else timeout
         if timeout <= 0:
             raise ValueError("timeout must be positive")
@@ -144,6 +235,16 @@ class GraphDecoder:
                 record["resync_rx"] = bytes(rx)
 
     def _transact(self, opcode, payload=b""):
+        """Send one framed command and return its validated reply payload.
+
+        Every exchange is appended to ``self.transactions`` with raw ``tx`` and
+        ``rx`` bytes. Any failure clears the cached graph identity. When a
+        failure happens at the transport, timeout, framing, or CRC layer, the
+        UART stream position is uncertain, so ``_pending`` is set to block
+        further writes until ``resynchronize()`` drains the outstanding reply.
+        A well-formed reply with a nonzero device status byte still clears the
+        cached graph, but leaves the wire stream synchronized.
+        """
         with self._lock:
             if self._pending is not None:
                 raise ProtocolError(
@@ -190,6 +291,12 @@ class GraphDecoder:
                 record["rx"] = bytes(rx)
 
     def identity(self):
+        """Query opcode 1 (IDENTITY) and validate the device's metadata words.
+
+        Expects a 60-byte payload of 15 little-endian uint32 values where the
+        protocol version is 2 and every word fits in 16 bits. Clears the cached
+        graph and raises ``ProtocolError`` if the response is invalid.
+        """
         with self._lock:
             payload = self._transact(1)
             if len(payload) != 60:
@@ -204,15 +311,23 @@ class GraphDecoder:
             return identity
 
     def _raw_last(self):
+        """Return the latest transaction's ``tx`` and ``rx`` bytes for error reports."""
         record = self.transactions[-1]
         return {"tx": record["tx"], "rx": record["rx"]}
 
     def _ack(self, opcode, payload=b""):
+        """Send a command and raise ``ProtocolError`` if the reply carries a payload."""
         if self._transact(opcode, payload):
             self._loaded = None
             raise ProtocolError("command ack must be empty", **self._raw_last())
 
     def save_archive(self, path):
+        """Write the loaded identity, uploaded edges, and wire log to a new JSON file.
+
+        Refuses to overwrite an existing file at ``path``. Each logged
+        transaction records its opcode, hex-encoded ``tx``/``rx``/``resync_rx``
+        frames, and any error string under the ``runtime-serial-v2`` format.
+        """
         import json
         from pathlib import Path
 
@@ -237,7 +352,18 @@ class GraphDecoder:
                 file.write("\n")
 
     def load_graph(self, detectors, edges, observables):
-        """Validate all edges before BEGIN and verify COMMIT identity before arming decode."""
+        """Validate a graph locally, upload it to the FPGA, and verify readback.
+
+        Checks ``detectors`` (1..65535), ``observables`` (0..32), and every
+        ``(a, b, mask)`` edge triple (distinct endpoints in ``0..detectors``
+        and ``mask`` within ``observables`` bits) against both protocol limits
+        and the board's reported capacities before sending ``BEGIN`` (opcode
+        2), chunked ``EDGES`` frames (opcode 3), and ``COMMIT`` (opcode 4).
+
+        After ``COMMIT``, re-reads ``identity()`` to confirm ``valid`` is set,
+        the dimensions match, and the 32-bit ``generation`` counter advanced by
+        one. Only then is the graph cached to arm ``decode()``.
+        """
         with self._lock:
             self._loaded = None
             self.uploaded_edges = ()
@@ -264,7 +390,7 @@ class GraphDecoder:
             ):
                 raise ValueError("graph exceeds device capacities")
             self._ack(2, struct.pack("<HHH", detectors, len(edges), observables))
-            # Each indexed edge is 10 bytes; 51 fit in the 512-byte payload.
+            # Each indexed edge is 10 bytes (<HHHI), so at most 51 fit in 512 bytes.
             for start in range(0, len(edges), 51):
                 chunk = b"".join(
                     struct.pack("<HHHI", index, *edges[index])
@@ -287,6 +413,21 @@ class GraphDecoder:
             return after
 
     def decode(self, syndrome):
+        """Decode one packed syndrome on the FPGA and return a ``DecoderReply``.
+
+        ``syndrome`` is a little-endian integer bitmask with detector 0 in bit
+        0 and must fit in ``loaded.detectors`` bits. Before sending opcode 5
+        (DECODE), this checks ``identity()`` to confirm the board still holds
+        the exact graph generation cached by ``load_graph``; after receiving
+        the 9-byte ``<IIB`` reply (``prediction``, ``cycles``, ``error``), it
+        checks ``identity().words[:10]`` again so a mid-shot reset or reload
+        cannot slip by unnoticed.
+
+        Raises ``RuntimeError`` if no graph is loaded, ``ValueError`` if the
+        syndrome is out of range, and ``ProtocolError`` if the identity drifts,
+        the reply width is wrong, ``cycles`` is zero, ``error`` is set, or
+        ``prediction`` exceeds ``loaded.observables`` bits.
+        """
         with self._lock:
             loaded = self._loaded
             if loaded is None:
@@ -326,5 +467,6 @@ class GraphDecoder:
             return DecoderReply(prediction, cycles, bool(error))
 
     def abort(self):
+        """Send opcode 6 (ABORT) and require an empty acknowledgement."""
         with self._lock:
             return self._ack(6)

@@ -1,4 +1,6 @@
-# Read configuration status through JTAG without programming the device.
+# Read-only JTAG probe for Zybo Z7-10 (run via `vivado -mode batch -source`).
+# Connects to local hw_server, queries xc7z010_1 configuration properties (e.g.
+# PROGRAM.IS_DONE), and exits without programming or resetting the device.
 open_hw_manager
 connect_hw_server -url localhost:3121
 open_hw_target

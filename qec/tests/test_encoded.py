@@ -1,4 +1,4 @@
-"""Executable contracts for the two protected, fixed logical experiments."""
+"""Tests for the encoded d=3 surface-code Bell and GHZ echo presets and their noise models."""
 
 import importlib.util
 
@@ -7,6 +7,7 @@ import stim
 
 
 def _prefix_before_interpatch_cx(circuit, occurrence):
+    """Return the noiseless circuit prefix up to the 1-based Nth transversal interpatch CX."""
     prefix = stim.Circuit()
     seen = 0
     for instruction in circuit.without_noise():
@@ -22,12 +23,14 @@ def _prefix_before_interpatch_cx(circuit, occurrence):
 
 
 def _logical_product(basis, patches):
-    # Dense data positions of Stim's left-column X and top-row Z strings.
+    """Build a Stim Pauli-product string for the logical X or Z operator across the given patches."""
+    # Data qubit offsets in a 17-qubit patch: left-column X and top-row Z.
     support = (0, 4, 11) if basis == "X" else (0, 2, 3)
     return "*".join(f"{basis}{17 * p + d}" for p in patches for d in support)
 
 
 def test_intermediate_encoded_bell_and_ghz_correlations():
+    """Check that noiseless Bell and GHZ logical stabilizer correlations hold before disentangling gates."""
     from qec.surface.encoded import examples
 
     bell, echo = examples()
@@ -51,6 +54,7 @@ def test_intermediate_encoded_bell_and_ghz_correlations():
 
 @pytest.mark.parametrize("noise_model", ["phenomenological", "circuit_level"])
 def test_every_single_fault_has_unique_correctable_signature(noise_model):
+    """Verify that every single fault in both noise models produces a nonzero, unambiguous detector syndrome."""
     from qec.surface.encoded import examples
 
     for entry in examples(noise_model=noise_model):
@@ -68,13 +72,13 @@ def test_every_single_fault_has_unique_correctable_signature(noise_model):
                 "two single faults have identical syndrome but different logical effects"
             )
         assert len(signatures) > (300 if noise_model == "phenomenological" else 1000)
-        # Graphlike distance is a diagnostic, not certification of a hypergraph
-        # decoder. The raw-signature injectivity above is the single-fault check.
+        # Graphlike distance is checked as a diagnostic; the signature map above verifies single-fault uniqueness.
         assert len(circuit.shortest_graphlike_error()) == 3
 
 
 @pytest.mark.parametrize("noise", [-0.001, 0.751])
 def test_invalid_noise_rejected(noise):
+    """Ensure depolarization probabilities outside [0, 0.75] are rejected."""
     from qec.surface.encoded import examples
 
     with pytest.raises(ValueError, match="noise"):
@@ -82,6 +86,7 @@ def test_invalid_noise_rejected(noise):
 
 
 def test_checked_in_encoded_files_match_generator():
+    """Verify that the checked-in .stim example files match the circuit generator output."""
     from pathlib import Path
 
     from qec.surface.encoded import examples
@@ -94,6 +99,7 @@ def test_checked_in_encoded_files_match_generator():
 
 
 def test_zero_noise_keeps_same_ideal_circuit_and_no_faults():
+    """Check that noise=0 preserves the ideal circuit and produces zero DEM errors."""
     from qec.surface.encoded import examples
 
     for quiet, noisy in zip(examples(noise=0), examples(noise=0.001)):
@@ -103,6 +109,7 @@ def test_zero_noise_keeps_same_ideal_circuit_and_no_faults():
 
 
 def test_encoded_bell_uses_two_complete_patches():
+    """Check that the Bell preset uses 34 qubits, avoids MPP, and stays deterministic without noise."""
     assert importlib.util.find_spec("qec.surface.encoded") is not None, (
         "missing encoded surface-code experiment generator"
     )
@@ -128,6 +135,7 @@ def test_encoded_bell_uses_two_complete_patches():
 
 
 def test_echo_protects_all_six_logical_qubits():
+    """Check that the echo preset uses 102 qubits, avoids S gates, and gives 6 deterministic noiseless observables."""
     import stim
 
     from qec.surface.encoded import examples
@@ -152,6 +160,7 @@ def test_echo_protects_all_six_logical_qubits():
 
 
 def test_default_raw_faults_exactly_match_compiled_graph():
+    """Verify that default preset faults are graphlike and decode identically under PyMatching and union-find."""
     import numpy as np
     import pymatching
 
@@ -202,6 +211,7 @@ def test_default_raw_faults_exactly_match_compiled_graph():
 
 
 def test_circuit_level_mode_remains_explicit_and_fails_closed():
+    """Check that circuit-level presets are marked incompatible and rejected during graph compilation."""
     from qec.surface.circuit import Capacities, compile_circuit
     from qec.surface.encoded import examples
 
@@ -216,6 +226,7 @@ def test_circuit_level_mode_remains_explicit_and_fails_closed():
 
 
 def test_phenomenological_noise_scope_and_perfect_gate_boundaries():
+    """Check that phenomenological noise omits gate depolarization and keeps each block's final check round noiseless."""
     from qec.surface.encoded import examples
 
     for entry in examples():
@@ -236,6 +247,7 @@ def test_phenomenological_noise_scope_and_perfect_gate_boundaries():
 
 
 def test_unknown_noise_model_is_rejected():
+    """Ensure unrecognized noise_model names raise ValueError."""
     from qec.surface.encoded import examples
 
     with pytest.raises(ValueError, match="noise_model"):
@@ -243,7 +255,7 @@ def test_unknown_noise_model_is_rejected():
 
 
 def test_noisy_final_check_records_would_break_raw_graphlikeness():
-    """Guard the physical reason for the explicitly perfect boundary records."""
+    """Confirm that making final check measurements noisy introduces non-graphlike >2-detector faults."""
     from qec.surface.encoded import examples
 
     bell = stim.Circuit(examples()[0]["circuit"])
@@ -262,6 +274,7 @@ def test_noisy_final_check_records_would_break_raw_graphlikeness():
 
 
 def test_default_examples_execute_real_editor_simulation_path():
+    """Check that both presets run through software CircuitExperiment and match observable truth."""
     from qec.surface.encoded import examples
     from qec.surface.simulation import CircuitExperiment
 
@@ -282,6 +295,7 @@ def test_default_examples_execute_real_editor_simulation_path():
 
 
 def test_patch_extraction_uses_surface_geometry():
+    """Verify that every intrapatch CX gate connects diagonally adjacent qubits on the surface-code grid."""
     import stim
 
     from qec.surface.encoded import examples
@@ -295,6 +309,6 @@ def test_patch_extraction_uses_surface_geometry():
             targets = instruction.targets_copy()
             for c, t in zip(targets[::2], targets[1::2]):
                 if c.value // 17 != t.value // 17:
-                    continue  # Explicitly nonlocal transversal interpatch gate.
+                    continue  # Skip nonlocal transversal interpatch CX gates.
                 a, b = coords[c.value], coords[t.value]
                 assert abs(a[0] - b[0]) == abs(a[1] - b[1]) == 1

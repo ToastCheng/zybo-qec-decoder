@@ -1,3 +1,5 @@
+"""Protocol and transport tests for the GraphDecoder serial client and C firmware parser."""
+
 import os
 import pty
 import select
@@ -13,6 +15,7 @@ from qec.surface.host import GraphDecoder, ProtocolError, encode_frame
 
 @contextmanager
 def pty_device(handler):
+    """Open a PTY-backed test server that checks request CRCs and streams handler replies in 3-byte chunks."""
     master, slave = pty.openpty()
     stop = threading.Event()
     failures = []
@@ -58,12 +61,14 @@ def pty_device(handler):
 
 
 class MailboxTestDevice:
+    """In-memory serial mailbox device that tracks uploaded graphs and returns canned decode replies."""
     def __init__(self):
         self.meta = [2, 128, 512, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         self.edges = []
         self.fail_commit = False
 
     def __call__(self, frame):
+        """Handle one incoming mailbox frame and return the encoded reply."""
         seq, op = frame[1:3]
         data = frame[5:-4]
         payload = b""
@@ -96,6 +101,7 @@ class MailboxTestDevice:
 
 
 def test_real_serial_graph_upload_and_multibit_decode():
+    """Check chunked graph upload, sequence numbering, and 32-bit prediction decode over a PTY."""
     device = MailboxTestDevice()
     edges = [(i % 9, 9, (1 << 31) | 1) for i in range(103)]
     with (
@@ -145,6 +151,7 @@ def test_real_serial_graph_upload_and_multibit_decode():
     ],
 )
 def test_invalid_graph_never_begins_upload(dimensions, edges, observables):
+    """Ensure invalid graph dimensions, edges, or capacities fail validation before sending upload frames."""
     with (
         pty_device(MailboxTestDevice()) as (port, requests),
         GraphDecoder(port) as decoder,
@@ -157,6 +164,7 @@ def test_invalid_graph_never_begins_upload(dimensions, edges, observables):
 
 
 def test_failed_commit_disarms_previous_graph_and_abort_does_not_rearm():
+    """Ensure a failed commit disarms decoding until a fresh graph is loaded, even after abort()."""
     device = MailboxTestDevice()
     with pty_device(device) as (port, _requests), GraphDecoder(port) as decoder:
         decoder.load_graph(9, [(0, 9, 1)], 32)
@@ -176,6 +184,7 @@ def test_failed_commit_disarms_previous_graph_and_abort_does_not_rearm():
     "damage", ["crc", "seq", "timeout", "oversize", "magic", "status"]
 )
 def test_transport_errors_retain_raw_bytes_and_next_valid_identity(damage):
+    """Check that protocol errors keep raw tx/rx bytes and that framing faults require resynchronization."""
     device = MailboxTestDevice()
     sent = []
 
@@ -220,6 +229,7 @@ def test_transport_errors_retain_raw_bytes_and_next_valid_identity(damage):
 
 
 def test_identity_change_disarms_decode_before_sending_shot():
+    """Ensure decode refuses to send a shot if the device's graph generation changed."""
     device = MailboxTestDevice()
     with pty_device(device) as (port, requests), GraphDecoder(port) as decoder:
         decoder.load_graph(9, [(0, 9, 0)], 32)
@@ -230,6 +240,7 @@ def test_identity_change_disarms_decode_before_sending_shot():
 
 
 def test_exclusive_port_and_sequence_wrap():
+    """Check that the serial port is opened exclusively and sequence bytes wrap cleanly past 255."""
     import serial
 
     with (
@@ -244,6 +255,7 @@ def test_exclusive_port_and_sequence_wrap():
 
 
 def test_archive_preserves_ordered_edges_identity_and_raw_frames(tmp_path):
+    """Check that save_archive records edge order, identity, and raw frames without overwriting existing files."""
     import json
 
     device = MailboxTestDevice()
@@ -267,6 +279,7 @@ def test_archive_preserves_ordered_edges_identity_and_raw_frames(tmp_path):
 
 @pytest.mark.parametrize("opcode", [2, 3, 4, 6])
 def test_nonempty_command_ack_is_not_success(opcode):
+    """Ensure nonempty payloads on graph-control or abort ACKs raise ProtocolError and leave decode disarmed."""
     device = MailboxTestDevice()
 
     def handler(frame):
@@ -287,6 +300,7 @@ def test_nonempty_command_ack_is_not_success(opcode):
 
 @pytest.mark.parametrize("change", ["cycles", 4, 5, 6, 7, 8, 9])
 def test_decode_rejects_reset_or_changed_identity_after_shot(change):
+    """Ensure decode raises and disarms if the reply reports zero cycles or altered post-shot metadata."""
     device = MailboxTestDevice()
 
     def handler(frame):
@@ -313,6 +327,7 @@ def test_decode_rejects_reset_or_changed_identity_after_shot(change):
 def test_late_complete_reply_requires_bounded_resynchronization_before_any_write(
     delayed_opcode, tmp_path
 ):
+    """Check that a timed-out request blocks writes until resynchronize() drains the late reply."""
     device = MailboxTestDevice()
     release = threading.Event()
     entered = threading.Event()
@@ -365,6 +380,7 @@ def test_late_complete_reply_requires_bounded_resynchronization_before_any_write
 
 
 def test_standard_crc_and_request_layout():
+    """Verify CRC-32 against the standard check vector and confirm little-endian request framing."""
     assert zlib.crc32(b"123456789") == 0xCBF43926
     header = b"\xd4\x07\x02\x06\x00" + struct.pack("<HHH", 9, 2, 32)
     assert encode_frame(0xD4, 7, 2, header[5:]) == header + struct.pack(
@@ -373,6 +389,7 @@ def test_standard_crc_and_request_layout():
 
 
 def test_native_parser_harness_under_sanitizers(tmp_path):
+    """Compile and run the C firmware parser test harness under ASan and UBSan."""
     import subprocess
     from pathlib import Path
 
@@ -401,9 +418,11 @@ def test_native_parser_harness_under_sanitizers(tmp_path):
 
 @pytest.mark.parametrize("detectors", [1, 9, 17, 128])
 def test_variable_syndromes_using_explicit_core_algorithm_test_device(detectors):
+    """Check decoding across 1-to-128-detector syndromes and reject out-of-range bits before sending."""
     from qec.surface.decoder import decode as test_device_algorithm
 
     class CoreAlgorithmTestDevice(MailboxTestDevice):
+        """Mailbox device that computes shot replies with the Python decoder."""
         def __call__(self, frame):
             if frame[2] != 5:
                 return super().__call__(frame)
@@ -431,6 +450,7 @@ def test_variable_syndromes_using_explicit_core_algorithm_test_device(detectors)
 
 @pytest.mark.parametrize("field", [4, 5, 6, 7, 8])
 def test_wrong_graph_readback_never_enables_decode(field):
+    """Ensure a metadata readback mismatch after commit raises ProtocolError and blocks decoding."""
     device = MailboxTestDevice()
 
     def handler(frame):
@@ -448,6 +468,7 @@ def test_wrong_graph_readback_never_enables_decode(field):
 
 
 def test_uncertain_completed_decode_is_never_retried():
+    """Ensure a truncated decode reply is never automatically retried and blocks writes until resync."""
     device = MailboxTestDevice()
 
     def handler(frame):
@@ -474,6 +495,7 @@ def test_uncertain_completed_decode_is_never_retried():
 
 
 def test_platform_header_entrypoint_runs_actual_firmware(tmp_path):
+    """Compile fpga/vitis/src/main.c against a mock platform header and verify its identity reply."""
     import subprocess
     from pathlib import Path
 

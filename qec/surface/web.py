@@ -1,4 +1,9 @@
-"""Serve the circuit editor on loopback, optionally behind a public HTTPS proxy."""
+"""Loopback HTTP server and CLI entry point for the surface-code circuit editor.
+
+Serves the browser UI and JSON API on ``127.0.0.1`` with strict ``Host`` and
+``Origin`` validation, optional reverse-proxy support via ``--public-origin``,
+and a shared lock so concurrent requests never overlap on the FPGA UART.
+"""
 
 import argparse
 import json
@@ -11,6 +16,14 @@ from qec.surface.engine import EditorLab
 
 
 def make_server(port=8765, serial_port=None, public_origin=None):
+    """Create and bind the threaded loopback HTTP server without starting it.
+
+    Always binds to ``127.0.0.1:<port>``. If ``public_origin`` is provided, it
+    must be a bare ``https://<host[:port]>`` origin (no path, query, or user
+    info); this allows requests forwarded through an HTTPS reverse proxy that
+    preserves the public ``Host`` header. Both POST endpoints share a single
+    non-blocking lock so only one experiment runs at a time.
+    """
     public_host = None
     if public_origin is not None:
         parsed = urlsplit(public_origin)
@@ -26,7 +39,7 @@ def make_server(port=8765, serial_port=None, public_origin=None):
             or any(character.isspace() for character in public_origin)
         ):
             raise ValueError("--public-origin must be an HTTPS origin without a path")
-        # Accessing port also rejects malformed or out-of-range port numbers.
+        # Accessing parsed.port validates that any explicit port number is legal.
         _ = parsed.port
         public_host = parsed.netloc
     lab = EditorLab(serial_port)
@@ -34,11 +47,15 @@ def make_server(port=8765, serial_port=None, public_origin=None):
     assets = Path(__file__).with_name("web_assets")
 
     class Handler(BaseHTTPRequestHandler):
+        """HTTP request handler bound to this server's ``EditorLab`` and run lock."""
+
         def setup(self):
+            """Set up request streams with a 20-second socket timeout."""
             super().setup()
             self.connection.settimeout(20)
 
         def reply(self, status, value, mime="application/json"):
+            """Send a JSON or raw byte response with no-store and strict CSP headers."""
             body = json.dumps(value).encode() if mime == "application/json" else value
             self.send_response(status)
             self.send_header("Content-Type", mime + "; charset=utf-8")
@@ -53,10 +70,12 @@ def make_server(port=8765, serial_port=None, public_origin=None):
             self.wfile.write(body)
 
         def trusted(self):
-            """Allow only configured authorities and their matching origins.
+            """Verify ``Host`` and ``Origin`` headers to block DNS rebinding and CSRF.
 
-            Do not trust forwarded headers: the tunnel preserves the public Host.
-            Host validation also applies when a navigation has no Origin header.
+            Accepts only loopback authorities (``127.0.0.1`` / ``localhost`` on
+            this server's port) plus the optional ``public_origin``. Ignores
+            forwarded headers because the reverse proxy preserves ``Host``, and
+            requires ``Origin`` (when present) to match ``Host`` exactly.
             """
             allowed = {
                 host: "http://" + host
@@ -82,6 +101,7 @@ def make_server(port=8765, serial_port=None, public_origin=None):
             return True
 
         def do_GET(self):
+            """Serve ``/api/layout`` or a whitelisted static UI asset for trusted requests."""
             if not self.trusted():
                 return
             if self.path == "/api/layout":
@@ -99,6 +119,14 @@ def make_server(port=8765, serial_port=None, public_origin=None):
             self.reply(200, (assets / name).read_bytes(), mime)
 
         def do_POST(self):
+            """Validate, serialize, and execute ``/api/run`` or ``/api/circuit-run``.
+
+            Enforces a single ``Content-Length`` header (rejecting chunked
+            bodies) with size caps of 16 KB for Z-memory runs and 800 KB for
+            raw Stim circuits. Rejects overlapping runs with 429, bad JSON or
+            validation errors with 400, oversized bodies with 413, and hardware
+            or serial ``OSError`` failures with 503.
+            """
             if not self.trusted():
                 return
             if self.path not in ("/api/run", "/api/circuit-run"):
@@ -142,6 +170,7 @@ def make_server(port=8765, serial_port=None, public_origin=None):
 
 
 def main():
+    """Parse CLI arguments and run the loopback HTTP server until interrupted."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--serial-port", help="FPGA UART, 115200 baud")

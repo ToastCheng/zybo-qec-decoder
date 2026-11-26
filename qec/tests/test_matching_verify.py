@@ -1,4 +1,4 @@
-"""Variable-size archive regression uses synthetic protocol fixtures, not board evidence."""
+"""Tests for variable-size archive verification in the experimental matching verifier."""
 import csv
 import importlib.util
 import json
@@ -14,6 +14,7 @@ spec.loader.exec_module(verify)
 
 
 def test_verifier_uses_explicit_population_not_old_1050_constant(tmp_path):
+    """Check that verify() handles a 514-shot synthetic archive and separates real and diagnostic counts."""
     count = 514
     rows = ['000001 000000000000001 0 0 0 ' + ('0' if i == 0 else '-1') for i in range(count)]
     (tmp_path / 'vectors.txt').write_text(str(count) + '\n' + '\n'.join(rows) + '\n')

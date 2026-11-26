@@ -1,4 +1,4 @@
-"""Independently verify all 48 board point wire logs, map to truth, and plot."""
+"""Verify all 48 archived UART wire logs (24 points x 2 decoders) and plot accuracy curves."""
 import csv
 import hashlib
 import json
@@ -15,6 +15,10 @@ from scipy.stats import beta
 
 
 def parse_frame(hex_string, magic):
+    """Decode a hex UART frame, verifying its magic byte, length, and CRC-32.
+
+    Returns (seq, opcode_or_status, payload).
+    """
     data = bytes.fromhex(hex_string)
     assert data[0] == magic and len(data) >= 9
     length = int.from_bytes(data[3:5], 'little')
@@ -24,12 +28,14 @@ def parse_frame(hex_string, magic):
 
 
 def clopper_pearson(failures, shots):
+    """Exact two-sided 95% Clopper-Pearson binomial confidence interval."""
     low = 0.0 if failures == 0 else float(beta.ppf(0.025, failures, shots - failures + 1))
     high = 1.0 if failures == shots else float(beta.ppf(0.975, failures + 1, shots - failures))
     return low, high
 
 
 def expected_frontier_cycles(width, operations, syndrome):
+    """Exact PL cycle count for the frontier FSM (1 cycle for zero syndrome)."""
     if syndrome == 0:
         return 1
     groups = 1 << (max(width, 2) - 2)
@@ -37,6 +43,12 @@ def expected_frontier_cycles(width, operations, syndrome):
 
 
 def verify_and_plot(work, output_dir):
+    """Validate archived UF and frontier UART logs, score all shots, and plot curves.
+
+    Checks every frame CRC, protocol version, program CRC, exact frontier cycle
+    count, and reference prediction; maps unique-syndrome results back to the
+    sampled shot arrays; writes results.csv, verification.json, and PNG/SVG plots.
+    """
     corpus = work / 'corpus'
     manifest = json.loads((corpus / 'manifest.json').read_text())
     rows = []

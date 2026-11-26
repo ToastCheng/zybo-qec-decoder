@@ -1,3 +1,8 @@
+"""Tests for memory experiment runs in `qec.surface.model.Lab`.
+
+Covers input validation, seeded noise replay, explicit faults, and strict FPGA error handling.
+"""
+
 import pytest
 import stim
 
@@ -12,6 +17,7 @@ NOISE_KEYS = (
 
 
 def settings(p=0.1, seed=17):
+    """Return a default distance-3 rotated Z-memory request with uniform noise."""
     return {
         "circuit": "surface_code:rotated_memory_z",
         "distance": 3,
@@ -39,6 +45,7 @@ def settings(p=0.1, seed=17):
     ],
 )
 def test_invalid_settings_rejected_before_decoder(field, value):
+    """Invalid circuit, dimension, seed, and fault settings fail before decoding starts."""
     calls = []
     lab = Lab(decoder=lambda syndrome: calls.append(syndrome))
     request = settings()
@@ -53,6 +60,7 @@ def test_invalid_settings_rejected_before_decoder(field, value):
 )
 @pytest.mark.parametrize("key", NOISE_KEYS)
 def test_invalid_noise_rejected_before_decoder(key, value):
+    """Invalid probability values in any noise channel fail before decoding starts."""
     calls = []
     request = settings()
     request["noise"][key] = value
@@ -62,6 +70,7 @@ def test_invalid_noise_rejected_before_decoder(key, value):
 
 
 def test_zero_max_noise_different_seeds_and_explicit_faults():
+    """Zero noise, explicit faults, and max-noise seeded runs all match independent Stim replay."""
     lab = Lab()
     zero = lab.run(settings(0, 0))
     assert zero["syndrome"] == zero["observable"] == 0
@@ -94,11 +103,13 @@ def test_zero_max_noise_different_seeds_and_explicit_faults():
     [None, {}, {"prediction": True, "cycles": 1}, {"prediction": 0, "cycles": 0}],
 )
 def test_invalid_hardware_reply_has_no_fallback(reply):
+    """Malformed FPGA decoder replies raise an error instead of falling back to software."""
     with pytest.raises(OSError, match="Invalid FPGA"):
         Lab(decoder=lambda syndrome: reply).run(settings(0))
 
 
 def test_hardware_failure_has_no_fallback():
+    """Hardware serial timeouts propagate directly instead of falling back to software."""
     def board(syndrome):
         raise OSError("serial timeout")
 
@@ -107,6 +118,7 @@ def test_hardware_failure_has_no_fallback():
 
 
 def test_run_samples_one_reproducible_shot_and_exports_exact_noise_replay():
+    """Seeded shots are reproducible and export a frozen circuit that replays identical Pauli frames."""
     lab = Lab()
     request = settings()
     result = lab.run(request)

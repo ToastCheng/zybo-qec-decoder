@@ -1,36 +1,52 @@
-# Experimental full-PL exact matching image
+# Experimental fixed-d3 parallel exact matching image
 
-This is a separate, incompatible image for the frozen d3/r3 Z-memory graph in
-`graph.json` (SHA256 `612138bcfd40ea7e4aae8e706215afc00944fe6811d1b4d3f951b9f747e22524`).
-It is not a general runtime matching graph loader. Every graph upload checks
-all 78 ordered endpoint/observable triples; weights are fixed lossless binary64
-integers in `ops.svh`. The mailbox advertises experimental protocol 0xd303,
-which the normal UF host rejects. Only the dedicated comparison runner may
-normalize this version after explicitly checking this image contract.
+This folder implements a specialized Zybo Z7-10 FPGA image that solves exact
+weighted minimum-weight matching in programmable logic for **one frozen graph**:
+three-round `d=3` rotated Z memory in `graph.json` (SHA-256
+`612138bcfd40ea7e4aae8e706215afc00944fe6811d1b4d3f951b9f747e22524`, 24
+detectors, 78 edges).
 
-The maintained PS, GPIO mailbox, top-level and ARM firmware are reused, with
-only a separate mailbox version. Per-shot matching is entirely in PL and has no
-software fallback. All 32 parity-frontier states advance in parallel through a
-five-stage exact update for each of the 102 frozen operations. Nonempty inputs
-take 512 cycles; zero syndrome takes one cycle, since every frozen weight is
-strictly positive and the empty correction is the unique minimum. Edge order,
-integer weights and skip-on-tie behavior are unchanged. The adapter independently
-counts acceptance-to-result cycles and raises decode error if the exact core's
-counter disagrees. Neither counter includes UART, ARM setup, graph validation or
-stalled retirement.
+Because its frontier width is only 5 (`2^5 = 32` states), all 32 states live
+in flip-flops and update in parallel through a five-stage XOR butterfly for
+each of the 102 frozen DP operations:
 
-Build from a private build directory with Vivado, selecting a fresh output:
-`vivado -mode batch -source <repo>/fpga/experimental/matching/build.tcl -tclargs build/matching-new/image`.
-Build the unchanged firmware using `QEC_IMAGE_DIR=build/matching-new/image`
-and `vitis -s <repo>/fpga/vitis/build.py`. The default build/loader remains UF.
-Never launch the public UF preview against this experimental image.
+- **Nonempty syndromes:** always take `512` clocks (`5.12 µs` at 100 MHz).
+- **All-zero syndrome:** finishes in `1` clock (`10 ns`), since every frozen
+  weight is strictly positive and the empty correction is uniquely optimal.
+- **Exact weights and verification:** lossless `binary64`-derived integer
+  weights are baked into `ops.svh`. The adapter still validates all 78
+  uploaded `(endpoint_a, endpoint_b, mask)` triples against the frozen graph
+  and runs a second independent cycle counter that raises `decode_error` if
+  the core's counter ever disagrees.
 
-`capture.py` accepts an explicit `--real-shots` count and verifies truth labels
-before serial I/O. Its matching cycle guard defaults to 512 for nonempty input.
-Archived serial-core artifacts predate the zero bypass and have a different
-schedule; use their original archived capture tool rather than mixing versions.
-`verify.py` independently parses frames and compares every result with the
-provided RTL edge-counted reference, using each archive's declared population.
+## Protocol isolation
 
-Evidence and reproduction: research repository `fpga-qec/matching-optimization/`.
-The earlier `fpga-qec/matching-board-comparison/` retains the serial baseline.
+The image reuses the Zynq PS block design, AXI GPIO wiring, and ARM firmware
+from `fpga/vitis/`, but advertises protocol version `0xd303` instead of UF's
+`2`. That makes normal runtime-UF clients and `qec.surface.web` reject it
+immediately. Only `capture.py` accepts `0xd303` after checking the frozen
+graph contract.
+
+## Building and verifying
+
+Run from a private build directory with a fresh output path:
+
+```sh
+vivado -mode batch -source /path/to/repo/fpga/experimental/matching/build.tcl \
+  -tclargs build/matching-new/image
+QEC_IMAGE_DIR=build/matching-new/image \
+  vitis -s /path/to/repo/fpga/vitis/build.py
+```
+
+The root `Makefile` still builds and loads the default runtime UF image. Do
+not point `qec.surface.web` at this experimental image.
+
+- `capture.py` replays a vector file over UART against either the UF or
+  matching image (`--real-shots` sets the timed shot count, and
+  `--matching-nonzero-cycles` defaults to `512`).
+- `verify.py` independently parses archived UART frames and checks every
+  prediction and cycle count against the RTL edge-counted reference.
+
+Full board comparisons and the earlier serial prototype are archived in the
+research repository under `fpga-qec/matching-optimization/` and
+`fpga-qec/matching-board-comparison/`.

@@ -1,4 +1,20 @@
 `timescale 1ns / 1ps
+// Core testbench for qec_decoder.
+//
+// What is verified
+// ----------------
+// 1. Configuration validation: rejects over-capacity dimensions, out-of-order
+//    or duplicate edge indices, invalid/self-loop endpoints, over-wide
+//    observable masks, simultaneous cfg strobes, and commits after a bad load.
+// 2. Handshake & isolation: measures unblocked back-to-back initiation interval
+//    (`initiation.csv`), stalls output under backpressure while checking output
+//    stability, confirms busy/held config rejections keep active state intact,
+//    and contrasts graph-preserving `shot_abort` with full `rst`.
+// 3. Multi-graph vector replay: reloads every graph from `qec_vectors.txt` into
+//    one elaborated instance, checks predictions/errors/cycle counts, logs per-
+//    state cycle counts (`profile.csv`) and ordered merge/peel events
+//    (`trace.csv`), and verifies the corpus crosses the 16-bit cycle boundary.
+// 4. Minimal capacities: `qec_parameter_probe` checks width edge cases at 1/1/1.
 module tb_decoder;
     logic clk = 0;
     always #5 clk = !clk;
@@ -39,10 +55,13 @@ module tb_decoder;
     wire parameters_done;
     qec_parameter_probe parameter_probe (.done(parameters_done));
 
+    // Advance to one time unit past posedge clk so nonblocking DUT updates settle.
     task tick;
         @(posedge clk);
         #1;
     endtask
+    // Pulse one configuration strobe (1=begin, 2=write, 3=commit) on negedge
+    // and assert cfg_ack and cfg_error on the following posedge.
     task configuration_command(input integer op, input bit expect_error);
         @(negedge clk);
         cfg_begin = op == 1;
@@ -57,6 +76,8 @@ module tb_decoder;
         cfg_write = 0;
         cfg_commit = 0;
     endtask
+    // Start a graph upload and confirm decoding is immediately disarmed,
+    // even when the requested dimensions are rejected.
     task begin_graph(input integer detectors, input integer edges, input integer observables, input bit bad);
         cfg_detector_count = 16'(detectors);
         cfg_edge_count = 16'(edges);
@@ -64,6 +85,7 @@ module tb_decoder;
         configuration_command(1, bad);
         if (configured || in_ready) $fatal(1, "begin did not invalidate");
     endtask
+    // Submit one edge record (index, endpoints, observable mask); bad=1 expects rejection.
     task append(input integer index, input integer endpoint_a, input integer endpoint_b, input logic [31:0] obs, input bit bad);
         cfg_edge_index = 16'(index);
         cfg_endpoint_a = 16'(endpoint_a);
@@ -71,11 +93,13 @@ module tb_decoder;
         cfg_observable_mask = obs;
         configuration_command(2, bad);
     endtask
+    // Load a 1-detector, 1-edge boundary graph with mask 0x80000005 (tests bit 31 and low bits).
     task one_graph;
         begin_graph(1, 1, 32, 0);
         append(0, 0, 1, 32'h80000005, 0);
         configuration_command(3, 0);
     endtask
+    // Assert in_ready and present one syndrome for a single acceptance edge.
     task launch(input logic [127:0] value);
         @(negedge clk);
         if (!in_ready) $fatal(1, "not ready to launch");
@@ -85,6 +109,7 @@ module tb_decoder;
         @(negedge clk);
         in_valid = 0;
     endtask
+    // Pulse out_ready to retire a held result and confirm the core returns to IDLE.
     task retire;
         @(negedge clk);
         out_ready = 1;
@@ -93,8 +118,8 @@ module tb_decoder;
         out_ready = 0;
         if (!in_ready || out_valid) $fatal(1, "did not retire");
     endtask
-    // Drive valid/ready continuously to measure the best possible initiation
-    // interval, rather than inferring it from the core's reported cycle field.
+    // Hold in_valid and out_ready high continuously to measure back-to-back
+    // initiation interval directly (expected: latency + 2 cycles for HOLD/IDLE).
     task check_initiation;
         integer edge_number, accepted, completed, last_accept, last_result;
         integer last_latency, initiation_fd;
@@ -146,6 +171,8 @@ module tb_decoder;
         if (!in_ready || out_valid) $fatal(1, "unblocked retirement failed");
         $fclose(initiation_fd);
     endtask
+    // Run one shot, verify prediction/error/cycle count, log profile + merge/peel
+    // trace rows, hold output under backpressure for 3 cycles, then retire it.
     task check_shot(input logic [127:0] value, input logic [31:0] expected, input bit error_expected);
         integer elapsed;
         integer i;
@@ -155,8 +182,8 @@ module tb_decoder;
         for (i = 0; i < 17; i = i + 1) state_cycles[i] = 0;
         while (!out_valid) begin
             state_cycles[dut.state] = state_cycles[dut.state] + 1;
-            // Compare ordered merges and peeled edges across source snapshots;
-            // observable agreement alone could conceal a changed tie policy.
+            // Record exact merge (GROW_APPLY=7) and peel (FIND_APPLY=14) events so
+            // tie-breaking regressions are caught even if final observables match.
             if (dut.state == 7 && dut.roots_differ && dut.expanded >= 2)
                 $fwrite(trace_fd, "%0d,%0d,merge,%0d,%0d,%0d\n", g, s, dut.edge_cursor, dut.winner, dut.loser);
             if (dut.state == 14 && dut.edge_forest && (dut.a == dut.leaf || dut.b == dut.leaf))
@@ -175,7 +202,8 @@ module tb_decoder;
         $fwrite(profile_fd, "\n");
         held_cycles = cycles;
         if (cycles > maximum_cycles) maximum_cycles = cycles;
-        // Stall the result while presenting an input that must not be accepted.
+        // Hold out_ready low while presenting another syndrome; outputs must stay
+        // frozen and in_ready must remain low until the held result is retired.
         @(negedge clk);
         in_valid = 1;
         syndrome = ~value;
@@ -196,14 +224,15 @@ module tb_decoder;
         trace_fd = $fopen("trace.csv", "w");
         $fwrite(trace_fd, "graph,shot,event,edge,vertex_or_winner,work_or_loser\n");
         $fwrite(profile_fd, "graph,shot,syndrome,prediction,error,cycles,IDLE,INIT,CHECK,GROW,GROW_ROOTS,GROW_VALUES,GROW_SELECT,GROW_APPLY,RELABEL,ADVANCE,LEAVES,FIND,FIND_VALUES,FIND_OTHER,FIND_APPLY,VERIFY,HOLD\n");
-        // Graph -1 distinguishes protocol diagnostics from the numbered corpus.
+        // Tag pre-corpus protocol diagnostics as graph -1 / shot -1 in CSV outputs.
         g = -1;
         s = -1;
         repeat (2) tick();
         @(negedge clk);
         rst = 0;
         if (in_ready || configured) $fatal(1, "full reset configured a graph");
-        // An abort cannot repair a poisoned graph load.
+        // Phase 1: negative configuration tests (over-capacity, short write, bad index,
+        // out-of-range endpoint, self-loop, over-wide mask, simultaneous strobes, extra edge).
         begin_graph(129, 1, 1, 1);
         configuration_command(3, 1);
         begin_graph(1, 513, 1, 1);
@@ -241,14 +270,16 @@ module tb_decoder;
         append(0, 0, 1, 1, 1);
         configuration_command(3, 1);
         if (configured || in_ready) $fatal(1, "invalid load did not fail closed");
+        // Phase 2: commit a valid 1-detector graph, check unblocked initiation interval,
+        // stray append/commit rejection, normal decode, and out-of-range syndrome bit rejection.
         one_graph();
-        // Append and commit require a preceding begin.
         check_initiation();
         append(0, 0, 1, 0, 1);
         configuration_command(3, 1);
         check_shot(1, 32'h80000005, 0);
         check_shot(128'h80000000000000000000000000000000, 0, 1);
-        // Configuration rejection must preserve an active shot or held result.
+        // Phase 3: config requests arriving mid-decode or during HOLD must error
+        // without corrupting the active shot, held result, or committed graph.
         launch(1);
         configuration_command(1, 1);
         configuration_command(2, 1);
@@ -259,7 +290,7 @@ module tb_decoder;
         configuration_command(3, 1);
         if (prediction !== 32'h80000005 || decode_error || !configured) $fatal(1, "busy config changed graph");
         retire();
-        // Abort discards the shot, not the committed graph.
+        // Phase 4: shot_abort mid-decode and during HOLD cancels only the shot, keeping the graph.
         launch(1);
         repeat (3) tick();
         @(negedge clk);
@@ -278,7 +309,7 @@ module tb_decoder;
         @(negedge clk);
         shot_abort = 0;
         check_shot(0, 0, 0);
-        // Reload every corpus graph without elaborating another decoder.
+        // Phase 5: replay every graph and shot in qec_vectors.txt without re-elaborating.
         fd = $fopen("qec_vectors.txt", "r");
         if (!fd) $fatal(1, "missing generated reference vectors");
         parsed = $fscanf(fd, "%d\n", graphs);
@@ -302,6 +333,7 @@ module tb_decoder;
             $display("graph=%0d detectors=%0d edges=%0d observables=%0d shots=%0d", g, n, m, o, shots);
         end
         $fclose(fd);
+        // Phase 6: full reset must clear the committed graph; verify clean reload afterward.
         @(negedge clk);
         rst = 1;
         tick();
@@ -324,7 +356,8 @@ module tb_decoder;
     end
 endmodule
 
-// Check declaration widths at the smallest supported capacities.
+// Parameter-edge probe: instantiate qec_decoder at its minimum capacities (1/1/1)
+// to catch any zero-width or bit-slice regressions in parameter expressions.
 module qec_parameter_probe(output logic done = 0);
     logic clk = 0;
     always #5 clk = !clk;

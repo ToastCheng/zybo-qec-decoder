@@ -1,4 +1,4 @@
-"""Independently verify archived wire records, references and paired statistics."""
+"""Verify archived UF and fixed-matching UART logs against reference vectors and RTL cycles."""
 import csv
 import json
 from pathlib import Path
@@ -9,6 +9,10 @@ import zlib
 
 
 def frame(hex_string, magic):
+    """Decode a hex UART frame, verifying its magic byte, length, and CRC-32.
+
+    Returns (seq, opcode_or_status, payload).
+    """
     data = bytes.fromhex(hex_string)
     assert data[0] == magic and len(data) >= 9
     length = int.from_bytes(data[3:5], "little")
@@ -18,6 +22,13 @@ def frame(hex_string, magic):
 
 
 def verify(root):
+    """Validate UF (v2) and fixed-matching (0xd303) wire logs against vectors and RTL.
+
+    Checks every frame CRC and sequence number, confirms matching saw one
+    rejected tampered-graph write, matches every shot's syndrome, prediction,
+    and cycle count to vectors.txt and rtl-latency.csv, and returns per-population
+    timing and logical-failure summaries.
+    """
     vectors = [line.split() for line in (root / "vectors.txt").read_text().splitlines()[1:]]
     rtl = list(csv.DictReader((root / "rtl-latency.csv").open()))
     count = int((root / "vectors.txt").read_text().splitlines()[0])

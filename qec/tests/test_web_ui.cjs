@@ -1,13 +1,17 @@
+/**
+ * Unit tests for core memory-code settings validation, API schema checks,
+ * LabState replay tracking, detector visibility, and required index.html
+ * controls.
+ *
+ * Runs purely in Node without a browser or web server.
+ */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const app = path.join(__dirname, "../surface/web_assets/app.js");
 
-/**
- * Check the fixed memory request dimensions, independently supplied rates, and
- * rejection of invalid noise or seed.
- */
+// Verify runSettings fixes the d=3, 3-round Z-memory template, keeps noise rates independent, and validates bounds.
 test("run settings use the fixed hardware-compatible template and independent noise rates", () => {
   const { runSettings } = require(app);
   const faults = [{ tick: 8, qubit: 10, pauli: "X" }];
@@ -32,10 +36,7 @@ test("run settings use the fixed hardware-compatible template and independent no
   assert.throws(() => runSettings(noise, -1, []), /seed/i);
 });
 
-/**
- * Require actionable errors for incomplete layouts while accepting the current
- * schema unchanged.
- */
+// Verify validateLayout rejects incomplete server payloads with a restart error and returns valid layouts unchanged.
 test("rejects stale server layouts with an actionable restart error", () => {
   const { validateLayout } = require(app);
   assert.throws(
@@ -57,10 +58,7 @@ test("rejects stale server layouts with an actionable restart error", () => {
   assert.equal(validateLayout(layout), layout);
 });
 
-/**
- * Require one Pauli frame per physical tick before handing a result to the
- * renderer.
- */
+// Verify validateReplay requires a pauli_frame for every physical tick before rendering.
 test("rejects stale replay schema instead of breaking the render loop", () => {
   const { validateReplay } = require(app);
   assert.throws(
@@ -79,10 +77,7 @@ test("rejects stale replay schema instead of breaking the render loop", () => {
   assert.equal(validateReplay(result, 2), result);
 });
 
-/**
- * Check clamped, reversible playback and independent faults on the same qubit at
- * different ticks.
- */
+// Verify LabState clamps seeks, steps both ways, tracks multiple faults per qubit across ticks, and resets cleanly.
 test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults", () => {
   const { LabState } = require(app);
   const s = new LabState(21);
@@ -111,10 +106,7 @@ test("arbitrary tick scrub, reversible stepping, and distinct multi-time faults"
   assert.deepEqual(s.faults, []);
 });
 
-/**
- * Check that fired detectors appear at their availability tick and disappear when
- * replay scrubs earlier.
- */
+// Verify visibleDetectors reveals fired bits at their measurement tick and hides them again on backward scrub.
 test("detectors stay unavailable before their measurement boundary, including backward scrub", () => {
   const { visibleDetectors } = require(app);
   const ds = [
@@ -126,10 +118,7 @@ test("detectors stay unavailable before their measurement boundary, including ba
   assert.deepEqual(visibleDetectors(ds, [0, 1], 8), [0]);
 });
 
-/**
- * Check that Details contains only a run summary and that errors and replay
- * controls stay in their intended places.
- */
+// Verify index.html keeps Details minimal and places required replay, status, and noise controls in order.
 test("Details contains only the run summary, without explanatory dumps", () => {
   const html = fs.readFileSync(
     path.join(path.dirname(app), "index.html"),

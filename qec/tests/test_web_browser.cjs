@@ -1,13 +1,21 @@
+/**
+ * End-to-end headless Chrome test for the built-in memory-code replay flow
+ * against a live QEC web server (requires QEC_WEB_URL; skips otherwise).
+ *
+ * Verifies that Run is explicit, replay/scrub/step/reset stay network-free,
+ * gate/fault/detector/host-correction states render with expected colors,
+ * failed or invalidated in-flight requests recover cleanly, and the layout
+ * stays usable from 1280px down to 360px. Also checks stale-server error
+ * reporting when QEC_STALE_URL is set.
+ */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-/**
- * Wait for Chrome startup, replay transitions, or asynchronous browser events
- * before checking state.
- */
+
+// Small async sleep helper for polling Chrome startup and UI transitions.
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test(
@@ -16,11 +24,6 @@ test(
     skip: !process.env.QEC_WEB_URL,
     timeout: 30000,
   },
-  /**
-   * Run memory replay in headless Chrome against the real API. Check measured
-   * flips and host correction, local playback, and recovery from failed or
-   * invalidated requests.
-   */
   async (t) => {
     const profile = fs.mkdtempSync(
       path.join(process.env.TMPDIR || os.tmpdir(), "qec-ui-chrome-"),
@@ -38,10 +41,7 @@ test(
       ],
       { stdio: ["ignore", "ignore", "pipe"] },
     );
-    /**
-     * Stop this test's Chrome, wait for its exit, then remove its scratch
-     * profile.
-     */
+    // Kill Chrome on teardown and delete its temporary profile.
     t.after(async () => {
       chrome.kill();
       await new Promise((r) => chrome.once("exit", r));
@@ -61,12 +61,12 @@ test(
       })
     ).json();
     const ws = new WebSocket(target.webSocketDebuggerUrl);
-    /** Wait for DevTools to connect or reject if the socket fails to open. */
+    // Wait for the DevTools WebSocket to open.
     await new Promise((resolve, reject) => {
       ws.onopen = resolve;
       ws.onerror = reject;
     });
-    /** Close the DevTools socket at teardown. */
+    // Close the DevTools WebSocket on teardown.
     t.after(() => ws.close());
     let id = 0;
     const requests = new Map();
@@ -74,10 +74,7 @@ test(
     const posts = [];
     let holdRun = false,
       heldRequest;
-    /**
-     * Match DevTools replies, collect network and exception evidence, and either
-     * hold a Run request or return the explicit 503 fixture.
-     */
+    // Route CDP replies by ID, log POSTs and uncaught exceptions, and intercept /api/run when Fetch is enabled.
     ws.onmessage = ({ data }) => {
       const message = JSON.parse(data);
       if (message.id) {
@@ -110,19 +107,13 @@ test(
         });
       }
     };
-    /**
-     * Send a Chrome DevTools Protocol command and await its response by sequence
-     * ID.
-     */
+    // Send a CDP command and resolve with its reply.
     const cdp = (method, params = {}) =>
       new Promise((resolve, reject) => {
         requests.set(++id, { resolve, reject });
         ws.send(JSON.stringify({ id, method, params }));
       });
-    /**
-     * Evaluate a page expression (including promises) and fail if Chrome reports
-     * an exception.
-     */
+    // Evaluate JS in the page and fail if Chrome reports an exception.
     const js = async (expression) => {
       const result = await cdp("Runtime.evaluate", {
         expression,
@@ -135,7 +126,7 @@ test(
       );
       return result.result.value;
     };
-    /** Poll a page condition and show the page's visible text on timeout. */
+    // Poll a page expression until truthy, dumping visible text on timeout.
     const until = async (expression, description) => {
       for (let i = 0; i < 150; i++) {
         if (await js(expression)) return;

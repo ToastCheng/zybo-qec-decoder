@@ -1,4 +1,11 @@
-"""Validate annotated physical Clifford circuits and extract decoding graphs."""
+"""Validate detector-annotated Stim circuits and compile them to decoding graphs.
+
+This is the first stage of the surface-code pipeline: it checks resource limits
+on raw Stim text before parsing, extracts an unweighted decoding graph through
+``qec.surface.graph.checked_graph``, and bundles the graph with circuit
+metadata and SHA-256 digests for the Union-Find decoder, window partitioner,
+and run archiver.
+"""
 
 import hashlib
 import json
@@ -12,6 +19,20 @@ from qec.surface.graph import checked_graph
 
 @dataclass(frozen=True)
 class Capacities:
+    """Resource limits enforced while validating and compiling a Stim circuit.
+
+    ``max_detectors``, ``max_edges``, and ``max_observables`` cap the extracted
+    decoding graph; ``HOST_CAPACITIES`` raises the detector and edge caps for
+    host-side runs that later split large graphs into FPGA-sized windows.
+
+    The remaining fields guard against oversized source files or deeply nested
+    ``REPEAT`` blocks before Stim expands them. ``max_bytes`` bounds the raw
+    input text, while ``max_expanded_bytes``, ``max_instructions``, and
+    ``max_targets`` track the unrolled totals. ``max_repeat`` and ``max_depth``
+    cap individual repeat counts and nesting depth, and ``max_work`` caps the
+    preflight estimate of ``qubit_span * expanded_instructions``.
+    """
+
     max_detectors: int = 128
     max_edges: int = 512
     max_observables: int = 32
@@ -29,13 +50,22 @@ HOST_CAPACITIES = Capacities(max_detectors=1024, max_edges=8192)
 
 
 def _preflight(text, limits):
-    """Bound source size and expanded work before Stim parses the input."""
+    """Check raw circuit size and expanded work before handing text to Stim.
+
+    This pass walks ``REPEAT`` blocks with a running multiplier rather than
+    unrolling them, so pathological repeat factors are rejected cheaply. It
+    checks ``rec[...]`` and ``sweep[...]`` indices separately from physical
+    qubit indices and raises ``ValueError`` for non-string input, malformed
+    repeat nesting, or any limit violation. Full instruction syntax validation
+    still happens later in ``stim.Circuit``.
+    """
     if not isinstance(text, str):
-        # Callers use ValueError for all rejected circuit input.
+        # Callers expect ValueError for all rejected circuit input.
         raise ValueError("preflight requires circuit text")  # noqa: TRY004
     if len(text) > limits.max_bytes or len(text.encode("utf-8")) > limits.max_bytes:
         raise ValueError("resource limit: source bytes")
 
+    # Strip bracketed instruction tags and comments before tokenizing.
     source = re.sub(r"(?m)(^[ \t]*[A-Za-z_][A-Za-z_0-9]*)\[[^\]\n]*\]", r"\1", text)
     source = re.sub(r"#[^\n]*", "", source)
     stack, multiplier = [], 1
@@ -87,6 +117,7 @@ def _preflight(text, limits):
         for token in indices:
             if len(token) > 10 or int(token) >= limits.max_qubits:
                 raise ValueError("resource limit: qubit index")
+            # MPAD arguments are classical bit values (0/1), not physical qubits.
             if name.upper() != "MPAD":
                 qubits = max(qubits, int(token) + 1)
         instructions += multiplier
@@ -104,6 +135,14 @@ def _preflight(text, limits):
 
 
 def _parse(text, limits):
+    """Parse a Stim circuit after preflight and dimension checks.
+
+    Runs ``_preflight``, parses ``text`` with Stim, checks the parsed qubit,
+    detector, and observable counts against ``limits``, and rejects any
+    ``rec[...]`` or ``sweep[...]`` target outside ``DETECTOR`` and
+    ``OBSERVABLE_INCLUDE`` because this compiler does not support adaptive
+    feedback or sweep-controlled gates.
+    """
     _preflight(text, limits)
     circuit = stim.Circuit(text)
     if (
@@ -123,7 +162,32 @@ def _parse(text, limits):
 
 
 def compile_circuit(text, reference_text=None, capacities=None):
-    """Validate deterministic annotations and return graph, circuit and provenance metadata."""
+    """Compile an annotated Stim circuit into an unweighted decoding graph.
+
+    Pass ``capacities`` to override the default ``Capacities`` limits, which
+    must stay within the 16-bit endpoint and 32-bit observable mask widths of
+    the FPGA wire protocol. When ``reference_text`` is omitted, the decoding
+    graph is extracted directly from ``text``. Providing ``reference_text``
+    lets a noiseless input circuit borrow its graph from a noisy reference
+    circuit, provided both have identical flattened noiseless operations and
+    annotations and the reference graph covers every fault signature in the
+    input circuit.
+
+    The returned schema-v1 dictionary contains:
+    - ``edges``: ordered ``[a, b, mask]`` triples where ``a < b``, single-
+      detector boundary faults connect to ``boundary_vertex`` (equal to the
+      detector count), and bit ``i`` of ``mask`` marks Stim observable ``L_i``.
+    - ``counts``, ``layout``, ``operations``, and ``detectors``: flattened
+      circuit dimensions, final qubit coordinates, and per-instruction /
+      per-detector timelines in Stim detector order.
+    - ``circuit``, ``ideal``, ``dem``, ``reference_dem``, ``reference_circuit``,
+      and ``sha256``: full text snapshots and digests for reproducibility. The
+      stored ``dem`` retains separator-correlated mechanisms that the
+      unweighted independent-edge graph does not encode.
+
+    Raises ``ValueError`` for invalid input, nondeterministic detectors,
+    incompatible or uncovered reference graphs, or exceeded capacities.
+    """
     limits = Capacities() if capacities is None else capacities
     if not isinstance(limits, Capacities) or any(
         type(v) is not int or v < 1 for v in asdict(limits).values()
@@ -143,7 +207,7 @@ def compile_circuit(text, reference_text=None, capacities=None):
         )
     reference_dem = reference.detector_error_model(decompose_errors=True)
 
-    # Ignore zero-probability terms before checking graph signatures.
+    # Drop zero-probability error terms before checking graph signatures.
     active = stim.DetectorErrorModel()
     for instruction in reference_dem.flattened():
         if instruction.type != "error" or instruction.args_copy()[0] != 0:

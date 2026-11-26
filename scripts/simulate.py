@@ -1,4 +1,13 @@
-"""Run Vivado decoder benches in separate build/sim directories."""
+"""Compile and run Vivado xsim decoder testbenches in isolated build/sim/ directories.
+
+Supports the `core`, `bridge`, and `counter` testbenches. For the `core` bench,
+generates a deterministic graph/syndrome vector file using Python's reference
+decoder unless `--vectors` is provided. Saves xvlog/xelab/xsim console logs into
+the build directory and requires the bench's `PASS qec <bench>` marker.
+
+Usage:
+    python3 scripts/simulate.py [--bench core|bridge|counter] [--build-dir build/sim/<name>]
+"""
 
 import argparse
 import ast
@@ -10,7 +19,7 @@ from pathlib import Path
 
 
 def write_vectors(root, build):
-    """Generate deterministic graph shots using the Python decoder."""
+    """Generate deterministic edge-case and random test graphs using Python's reference decoder."""
     tree = ast.parse((root / "qec/surface/decoder.py").read_text())
     function = next(
         node
@@ -18,7 +27,7 @@ def write_vectors(root, build):
         if isinstance(node, ast.FunctionDef) and node.name == "decode"
     )
     namespace = {}
-    # Execute only the local decoder function, without importing QEC dependencies.
+    # Load only decode() from decoder.py so simulation works without QEC runtime dependencies.
     exec(  # noqa: S102
         compile(ast.Module(body=[function], type_ignores=[]), "decoder.py", "exec"),
         namespace,
@@ -38,7 +47,7 @@ def write_vectors(root, build):
         rng.shuffle(pairs)
         edges = [(a, b, rng.getrandbits(o)) for a, b in pairs[:m]]
         graphs.append((n, edges, o))
-    # A reverse path crosses the 16-bit cycle boundary during normal decoding.
+    # Reverse chain forces normal decoding to cross the 16-bit cycle-counter boundary.
     graphs.append(
         (128, [(a, a + 1, rng.getrandbits(32)) for a in reversed(range(128))], 32)
     )
@@ -64,6 +73,12 @@ def write_vectors(root, build):
 
 
 def main():
+    """Run the selected Vivado testbench in a private build/sim/ directory.
+
+    Validates CLI flags, generates or copies `qec_vectors.txt` for the `core`
+    bench, invokes `xvlog`, `xelab`, and `xsim`, writes per-tool console logs,
+    and fails unless the bench prints its `PASS qec <bench>` marker.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--bench", choices=("core", "bridge", "counter"), default="core"

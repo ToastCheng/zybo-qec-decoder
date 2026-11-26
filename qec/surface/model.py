@@ -1,4 +1,10 @@
-"""Sample generated Z-memory shots and verify host counterfactual corrections."""
+"""Fixed rotated surface-code Z-memory lab and host correction overlay.
+
+Generates seeded ``surface_code:rotated_memory_z`` shots using Stim, records
+per-tick Pauli frames and the exact concrete Pauli faults sampled by each noise
+channel, decodes with software or a supplied hardware callback, and computes a
+verified host-side physical correction representative via GF(2) elimination.
+"""
 
 from functools import lru_cache
 
@@ -8,13 +14,26 @@ from qec.surface.decoder import decode
 
 
 class Lab:
-    """Sample Z-memory faults and independently replay host correction representatives."""
+    """Simulate rotated Z-memory shots and build host correction representatives."""
 
     def __init__(self, decoder=None):
+        """Start with a d=3, 3-round Z-memory circuit and an optional decoder.
+
+        If provided, ``decoder`` is called as ``decoder(syndrome)`` and must
+        return ``{"prediction": 0 or 1, "cycles": <positive int>}``. When
+        ``None``, the software decoder supplies the prediction.
+        """
         self.decoder = decoder
         self.configure("surface_code:rotated_memory_z", 3, 3)
 
     def configure(self, generator, distance, rounds):
+        """Rebuild the clean memory circuit and compile a default decoding graph.
+
+        Builds the noiseless circuit for ``(generator, distance, rounds)`` and
+        derives an initial decoding graph from a noisy copy with 0.001
+        post-Clifford depolarization. Clears cached fault signatures and GF(2)
+        bases because qubit indices, ticks, and detectors change with geometry.
+        """
         self._signature.cache_clear()
         self._basis.cache_clear()
         self.clean = stim.Circuit.generated(
@@ -37,6 +56,21 @@ class Lab:
         }
 
     def run(self, settings):
+        """Run one seeded, noisy rotated Z-memory shot and decode its syndrome.
+
+        ``settings`` must provide ``circuit`` (``surface_code:rotated_memory_z``),
+        odd ``distance`` in 3..7, ``rounds`` in 1..8, ``seed`` in ``0..2^53-1``,
+        a ``noise`` dict with the four supported Stim rates in ``[0, 0.75]``,
+        and a ``faults`` list of up to 64 explicit data-qubit injections.
+
+        Steps through the noisy circuit with ``stim.FlipSimulator``, diffing
+        the Pauli frame across each noise instruction to capture the exact
+        sampled faults into a deterministic ``frozen`` circuit. After verifying
+        that replaying ``frozen`` reproduces the shot, compiles the graph,
+        decodes (on FPGA if a callback is attached, else in software), and
+        searches for a host-side correction overlay verified by replaying
+        ``frozen`` with the correction applied.
+        """
         if not isinstance(settings, dict) or set(settings) != {
             "circuit",
             "distance",
@@ -117,6 +151,9 @@ class Lab:
                     frozen.append(op)
             for op in segment:
                 injected.append(op)
+                # Diff the Pauli frame before and after each noise gate to see
+                # which concrete errors Stim sampled, then bake them into
+                # `frozen` as probability-1 errors for deterministic replay.
                 before = (
                     simulator.peek_pauli_flips(instance_index=0)
                     if op.name in noise_ops
@@ -183,6 +220,9 @@ class Lab:
         if hardware is not None:
             result["prediction"] = hardware["prediction"]
 
+        # Build an illustrative physical correction on the host, apply it to
+        # the frozen circuit, and keep it only if replay clears the syndrome
+        # and leaves the expected residual observable.
         correction = self._correction(
             [{"tick": t} for t in range(len(segments))], syndrome, result["prediction"]
         )
@@ -244,6 +284,7 @@ class Lab:
         )
 
     def _segments(self):
+        """Split ``self.clean`` at ``TICK`` boundaries, starting with tick 0."""
         segments = [stim.Circuit()]
         for op in self.clean:
             if op.name == "TICK":
@@ -253,6 +294,7 @@ class Lab:
         return segments
 
     def _fault_circuit(self, faults):
+        """Copy ``self.clean`` with probability-1 Pauli errors inserted before their ticks."""
         circuit = stim.Circuit()
         for tick, segment in enumerate(self._segments()):
             if tick:
@@ -263,18 +305,23 @@ class Lab:
             circuit += segment
         return circuit
 
-    # Bounded shared caches retain instances until eviction; configure clears both.
+    # Bounded caches on the instance are cleared whenever configure() runs.
     @lru_cache(maxsize=512)  # noqa: B019
     def _signature(self, tick, qubit, pauli):
-        """Pack detector bits below observable bits for one simulated fault."""
+        """Return a bitmask packing a single fault's syndrome below its observable bit."""
         s, o = self._sample(
             self._fault_circuit([{"tick": tick, "qubit": qubit, "pauli": pauli}])
         )
         return s | (o << self.clean.num_detectors)
 
-    @lru_cache(maxsize=8)  # noqa: B019 - Bounded and cleared on configure, like _signature.
+    @lru_cache(maxsize=8)  # noqa: B019 - Bounded and cleared on configure(), like _signature.
     def _basis(self, ticks):
-        """Build a GF(2) basis of fault signatures and their physical representatives."""
+        """Build a GF(2) basis of single-qubit fault signatures over ``ticks``.
+
+        Performs Gaussian elimination over packed ``(syndrome | observable)``
+        bitmasks using X and Z faults on every data qubit at each tick. Maps
+        each pivot bit position to ``(reduced_signature, fault_set)``.
+        """
         basis = {}
         for tick in ticks:
             for datum in self.layout()["data"]:
@@ -292,7 +339,14 @@ class Lab:
         return basis
 
     def _correction(self, faults, syndrome, prediction):
-        """Find a same-tick representative matching detectors and logical prediction."""
+        """Solve for a physical fault set matching ``syndrome`` and ``prediction``.
+
+        Because the decoder only predicts the logical observable flip rather
+        than individual qubit errors, we reduce ``syndrome | (prediction << n)``
+        against the GF(2) basis to find an illustrative data-qubit correction
+        restricted to the ticks present in ``faults``. Returns ``None`` if the
+        target vector is outside the basis span.
+        """
 
         value = syndrome | (prediction << self.clean.num_detectors)
         frame = frozenset()
@@ -307,6 +361,13 @@ class Lab:
         return [{"tick": t, "qubit": q, "pauli": p} for t, q, p in sorted(frame)]
 
     def _pauli_trace(self, faults):
+        """Propagate deterministic ``faults`` through ``self.clean`` tick by tick.
+
+        Injects each fault at the start of its tick, pushes the Pauli frame
+        through ``H`` and ``CX`` gates, and clears qubits on ``R`` and ``MR``.
+        Returns one ``{qubit_id_str: "X"|"Y"|"Z"}`` dict per tick for active
+        non-identity qubits.
+        """
         frame = stim.PauliString(self.clean.num_qubits)
         frames = []
         for tick, segment in enumerate(self._segments()):
@@ -327,6 +388,7 @@ class Lab:
         return frames
 
     def _validate_faults(self, faults):
+        """Ensure ``faults`` has at most 64 valid ``(tick, data_qubit, pauli)`` entries."""
         allowed = {q["id"] for q in self.layout()["data"]}
         if not isinstance(faults, list) or len(faults) > 64:
             raise ValueError("faults must be a list of at most 64 records")
@@ -343,6 +405,12 @@ class Lab:
                 raise ValueError("Expected tick, data qubit and Pauli X/Y/Z")
 
     def simulate_faults(self, faults):
+        """Run a noiseless shot with only explicit faults on the current circuit.
+
+        Uses the currently configured graph without recompiling, decodes the
+        resulting syndrome (via FPGA callback if set, else software), and looks
+        for a host correction restricted to the ticks where faults were injected.
+        """
         self._validate_faults(faults)
         injected = self._fault_circuit(faults)
         syndrome, observable = self._sample(injected)
@@ -404,13 +472,20 @@ class Lab:
 
     @staticmethod
     def _sample(circuit):
-        """Sample a deterministic fault circuit and pack detector and observable bits."""
+        """Sample one shot of a deterministic circuit and return ``(syndrome, observable)``."""
         bits, obs = circuit.compile_detector_sampler(seed=0).sample(
             1, separate_observables=True
         )
         return sum(int(b) << i for i, b in enumerate(bits[0])), int(obs[0, 0])
 
     def layout(self):
+        """Return geometry, tick schedule, graph edges, and defaults for the UI.
+
+        Identifies data qubits from the final ``M`` instruction, X checks from
+        the first ``H`` layer, check supports from the first-round ``CX`` pairs,
+        and each detector's ``available_tick`` from the segment containing its
+        ``DETECTOR`` instruction.
+        """
         coords = self.clean.get_final_qubit_coordinates()
         data = next(
             [t.value for t in op.targets_copy()] for op in self.clean if op.name == "M"

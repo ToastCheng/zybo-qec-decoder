@@ -1,6 +1,12 @@
 `timescale 1ns/1ps
-// Experimental instruction-loaded exact T-join frontier, four states per group.
-// Configuration is a parity-DP program, NOT the UF endpoint graph protocol.
+// Programmable parity-frontier DP exact matching (minimum-weight T-join) core.
+//
+// Instead of graph edges for Union-Find, the host uploads a compiled DP
+// program of edge and forget operations over a parity frontier of up to
+// MAX_WIDTH bits (up to 4,096 states). Each state stores a 64-bit integer cost
+// and a 1-bit logical observable parity across four parallel BRAM lanes.
+// The uploaded 10-byte program records are checksummed in hardware (IEEE CRC-32)
+// and exposed on program_crc.
 module qec_decoder #(
     parameter integer MAX_DETECTORS = 128,
     parameter integer MAX_EDGES = 1024,
@@ -92,6 +98,8 @@ module qec_decoder #(
     assign decode_error = out_valid && (result_cost == INF || cycles != independent_cycles);
     assign program_crc = ~crc;
 
+    // Fold one byte into a running reflected IEEE CRC-32 state.
+    // program_crc applies the final bitwise inversion.
     function automatic [31:0] crc8(input logic [31:0] previous, input logic [7:0] value);
         logic [31:0] x;
         begin
@@ -102,8 +110,14 @@ module qec_decoder #(
         end
     endfunction
 
-    // Each source bank has a direct port and one permuted port. XOR permutes
-    // the four lane banks bijectively, eliminating simultaneous read conflicts.
+    // Four parallel BRAM lanes (low 2 bits of the frontier parity state) with
+    // ping-pong banks (memory0/memory1) indexed by group_index (upper bits).
+    // Each entry packs {cost[63:0], observable_parity}.
+    //
+    // A transition pairs state s with s ^ permutation. Because XOR on the
+    // 2-bit lane index is a bijection on {0..3}, reading group_index and
+    // alternate_group in all four lanes fetches both same_entry and other_entry
+    // simultaneously with no BRAM bank conflicts.
     for (genvar lane = 0; lane < 4; lane = lane + 1) begin : lanes
         (* ram_style = "block" *) logic [64:0] memory0 [0:GROUPS-1];
         (* ram_style = "block" *) logic [64:0] memory1 [0:GROUPS-1];
@@ -113,6 +127,9 @@ module qec_decoder #(
         assign direct1[lane] = read1a;
         assign alternate0[lane] = read0b;
         assign alternate1[lane] = read1b;
+        // op_kind=1 (forget detector): keep states with (s & op_mask) == 0 and
+        // copy other_entry; mark projected-out states unreachable (INF).
+        // op_kind=0 (edge): take candidate if strictly cheaper, flipping obs.
         assign selected[lane] = op_kind
             ? (invalid_projection ? {INF, 1'b0} : other_entry)
             : (better[lane] ? {candidate[lane], other_entry[0] ^ op_observable} : same_entry);
@@ -134,6 +151,8 @@ module qec_decoder #(
                 other_entry <= bank ? alternate1[lane ^ permutation[1:0]]
                     : alternate0[lane ^ permutation[1:0]];
             end
+            // Split the 64-bit cost addition across ADD_LOW and ADD_HIGH
+            // (32 bits + carry per cycle) to close timing at 100 MHz.
             if (state == ADD_LOW) begin
                 low_sum[lane] <= {1'b0, other_entry[32:1]} + {1'b0, op_weight[31:0]};
                 finite[lane] <= other_entry[64:1] != INF;
@@ -145,7 +164,8 @@ module qec_decoder #(
         end
     end
 
-    // Count independently of the datapath FSM and detect a bad timestamp in PL.
+    // Independent cycle counter cross-checked against the FSM's cycles counter
+    // in decode_error to catch any datapath timing/bookkeeping mismatch in PL.
     always_ff @(posedge clk) begin
         if (rst || shot_abort) begin
             counter_busy <= 0;
@@ -159,6 +179,9 @@ module qec_decoder #(
             counter_busy <= 0;
     end
 
+    // Main decode FSM: handles the 1-cycle zero-syndrome shortcut, table
+    // initialization, per-operation 6-cycle group sweeps across ping-pong
+    // banks, final state-0 readback, and output hold until out_ready.
     always_ff @(posedge clk) begin
         if (rst || shot_abort) begin
             state <= IDLE;
@@ -244,9 +267,14 @@ module qec_decoder #(
         end
     end
 
-    // Two records encode each operation. The even record carries low weight;
-    // the odd one repeats its header and carries high weight. CRC32 covers the
-    // exact ten little-endian wire bytes of every accepted record, including index.
+    // Program loader and hardware CRC-32.
+    // Each DP operation arrives as two consecutive 10-byte cfg_write records:
+    //   - even record: header (endpoint_a = {op_kind, 3'b0, mask},
+    //                  endpoint_b = {op_observable, 8'b0, detector}) + weight[31:0]
+    //   - odd record:  identical header + weight[63:32], committing the op
+    // Every accepted record is shifted byte-by-byte through crc8 (10 cycles)
+    // in little-endian wire order {weight_word, endpoint_b, endpoint_a, index}
+    // before asserting cfg_ack. Any bad record poisons the load until cfg_begin.
     always_ff @(posedge clk) begin
         if (rst) begin
             configured <= 0;

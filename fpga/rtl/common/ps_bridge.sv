@@ -1,5 +1,23 @@
 `timescale 1ns / 1ps
-// GPIO and decoder share a clock; only one command may be outstanding.
+// AXI GPIO toggle-mailbox bridge between the ARM PS and qec_decoder.
+//
+// How the handshake works
+// -----------------------
+// The AXI GPIO block and qec_decoder share the same 100 MHz fabric clock, and
+// only one command may be in flight at a time. To send a command, ARM writes
+// OPCODE, INDEX, DATA, and flips ctrl[31] (REQ) to the opposite of status[31]
+// (ACK), holding ctrl steady until status[31] flips to match ctrl[31].
+//
+// Status flags
+// ------------
+// - DONE  (status[30]): latched flag showing the last decode finished and its
+//   result words (metadata 10..14) are populated. DONE means completed, not
+//   succeeded: a decode error still drives DONE=1 alongside ERROR=1. DONE
+//   clears on a new decode launch, a new graph load (begin), or shot abort.
+// - ERROR (status[29]): describes only the current command acknowledgement
+//   (bad opcode/index, rejected graph write, decode error on op 6, or invalid
+//   metadata index on op 7). A later valid metadata read clears ERROR on the
+//   status bus without clearing saved_error (metadata index 14).
 module ps_bridge #(
     parameter integer MAX_DETECTORS = 128,
     parameter integer MAX_EDGES = 512,
@@ -16,33 +34,46 @@ module ps_bridge #(
         LAUNCH, WAIT_RESULT, ABORT_SHOT, ABORT_ACK
     } state_t;
     state_t state;
-    // GPIO mailbox words (field widths are not drawn to scale).
-    // ctrl: ARM writes; keep stable until status.ACK matches ctrl.REQ.
+    // GPIO mailbox word layouts (field widths are not drawn to scale).
+    //
+    // ctrl (ARM -> PL): hold every bit stable until status.ACK matches ctrl.REQ.
     //  31    30:28     27:24      23:16             15:0
     // +-----+---------+----------+-----------------+------------------+
     // | REQ | ignored | OPCODE   | INDEX           | DATA             |
     // +-----+---------+----------+-----------------+------------------+
     //    1       3         4              8                  16 bits
     //
-    // status: PL writes; DONE is latched decode completion, not success.
+    // status (PL -> ARM): DONE is latched decode completion, not logical success.
     //  31    30     29      28:16                   15:0
     // +-----+------+-------+-----------------------+------------------+
     // | ACK | DONE | ERROR | zero                  | READ_DATA        |
     // +-----+------+-------+-----------------------+------------------+
     //    1      1      1              13                     16 bits
-    // ERROR describes this acknowledgement. READ_DATA is metadata for op 7.
-    // Opcodes: 1=stage, 2=begin, 3=append, 4=commit, 5=syndrome,
-    //          6=decode, 7=metadata, 8=abort. See docs/decoder-design.md.
     //
-    // Staging indices: 0=detectors, 1=edges, 2=observables, 3=edge index,
-    //                  4=endpoint A, 5=endpoint B, 6=mask low, 7=mask high.
-    // Observable mask assembled from staging[7:6]:
+    // Opcodes (INDEX must be 0 for opcodes 2, 3, 4, 6, and 8):
+    //   1 = write staging register (INDEX 0..7)
+    //   2 = begin graph load using staging[0..2]
+    //   3 = append edge using staging[3..7]
+    //   4 = commit graph (increments `generation` on success)
+    //   5 = write 16-bit syndrome word (INDEX w -> detectors 16*w .. 16*w+15)
+    //   6 = launch decode (requires all active syndrome words written fresh)
+    //   7 = read metadata register INDEX (0..14) into status.READ_DATA
+    //   8 = abort current shot / clear cached result while keeping the graph
+    // See docs/decoder-design.md for the full protocol specification.
+    //
+    // Staging register map (written via opcode 1):
+    //   0 = detector_count, 1 = edge_count, 2 = observable_count,
+    //   3 = edge_index,     4 = endpoint_a, 5 = endpoint_b,
+    //   6 = mask_lo,        7 = mask_hi.
+    //
+    // 32-bit observable mask assembled from staging[7:6]:
     //  31                         16 15                              0
     // +-----------------------------+---------------------------------+
     // | staging[7]: mask high       | staging[6]: mask low            |
     // +-----------------------------+---------------------------------+
-    // Syndrome write INDEX=w: DATA[b] is detector 16*w+b (b=0..15).
-    // Bits past detector_count must be zero.
+    //
+    // Syndrome packing (opcode 5, INDEX = w): DATA[b] is detector 16*w + b
+    // (b = 0..15). Any bit at or above detector_count must be 0.
     logic [15:0] staging [0:7];
     logic [WORDS*16-1:0] shot;
     logic [WORDS-1:0] written_words;
@@ -95,7 +126,7 @@ module ps_bridge #(
         .cycles(cycles)
     );
 
-    // Metadata words returned in status.READ_DATA (16 bits each):
+    // Metadata registers returned in status.READ_DATA for opcode 7 (16 bits each):
     //  index   0       1        2      3       4        5      6
     //       +-------+--------+------+-------+--------+------+--------+
     //       | ver=2 | max D  |max E | max O | used D |used E| used O |
@@ -104,9 +135,10 @@ module ps_bridge #(
     //       +-------+-------+-------+-------+-------+-------+-------+-------+
     //       | valid |gen LO |gen HI |pred LO|pred HI|cyc LO |cyc HI | error |
     //       +-------+-------+-------+-------+-------+-------+-------+-------+
-    // valid/error: bit 0 carries the flag; bits 15:1 are zero.
-    // Each HI/LO pair reconstructs {HI[15:0], LO[15:0]}; other indices error.
+    // valid (index 7) and error (index 14) use bit 0 with bits 15:1 forced to 0.
+    // Each HI/LO pair reconstructs {HI[15:0], LO[15:0]}. Any index > 14 errors.
     always_comb begin
+        // Require every 16-bit word covering 0..detector_count-1 to be written before decode.
         all_words_written = 1;
         for (integer w = 0; w < WORDS; w = w + 1) begin
             if (w * 16 < detector_count && !written_words[w])
@@ -114,8 +146,6 @@ module ps_bridge #(
         end
         metadata_valid = 1;
         metadata = 0;
-        // Metadata words: version, capacities, counts, valid, generation,
-        // prediction, cycles and error. Split 32-bit fields low word first.
         case (ctrl[23:16])
             0: metadata = 2;
             1: metadata = 16'(MAX_DETECTORS);
@@ -154,15 +184,18 @@ module ps_bridge #(
         end else begin
             case (state)
                 IDLE: begin
+                    // A toggle on ctrl[31] signals a new request from the ARM PS.
                     if (ctrl[31] != status[31]) begin
                         request_bit <= ctrl[31];
                         request_opcode <= ctrl[27:24];
-                        // Acknowledge core commands only after their completion signal.
+                        // Commands that do not take an index (ops 2, 3, 4, 6, 8)
+                        // must pass INDEX == 0; reject nonzero indices immediately.
                         if ((ctrl[27:24] == 2 || ctrl[27:24] == 3
                             || ctrl[27:24] == 4 || ctrl[27:24] == 6
                             || ctrl[27:24] == 8) && ctrl[23:16] != 0) begin
                             status <= {ctrl[31], result_complete, 1'b1, 29'b0};
                         end else case (ctrl[27:24])
+                            // Op 1: stage a 16-bit parameter for graph begin/append.
                             1: begin
                                 if (ctrl[23:16] < 8) begin
                                     staging[ctrl[23:16]] <= ctrl[15:0];
@@ -171,6 +204,7 @@ module ps_bridge #(
                                     status <= {ctrl[31], result_complete, 1'b1, 29'b0};
                                 end
                             end
+                            // Op 2: start a fresh graph upload and clear cached shot/result state.
                             2: begin
                                 shot <= 0;
                                 written_words <= 0;
@@ -180,8 +214,12 @@ module ps_bridge #(
                                 saved_error <= 0;
                                 state <= BEGIN_CONFIG;
                             end
+                            // Op 3: append one staged edge record to the decoder core.
                             3: state <= APPEND_EDGE;
+                            // Op 4: commit the staged graph in the decoder core.
                             4: state <= COMMIT_CONFIG;
+                            // Op 5: write one 16-bit syndrome slice; reject out-of-range
+                            // words or nonzero padding bits past detector_count.
                             5: begin
                                 if (!configured || ctrl[23:16] >= WORDS
                                     || 16 * ctrl[23:16] >= detector_count
@@ -193,19 +231,22 @@ module ps_bridge #(
                                     status <= {ctrl[31], result_complete, 1'b0, 29'b0};
                                 end
                             end
+                            // Op 6: launch a decode once every active syndrome word has been written.
                             6: begin
                                 if (!configured || !all_words_written) begin
                                     status <= {ctrl[31], result_complete, 1'b1, 29'b0};
                                 end else begin
                                     result_complete <= 0;
                                     state <= LAUNCH;
-                                    // Each shot must rewrite all active syndrome words.
+                                    // Clear written_words so the next shot cannot reuse stale slices.
                                     written_words <= 0;
                                 end
                             end
+                            // Op 7: return the selected 16-bit metadata register in READ_DATA.
                             7: begin
                                 status <= {ctrl[31], result_complete, !metadata_valid, 13'b0, metadata};
                             end
+                            // Op 8: abort any in-flight shot and clear cached results (keeps graph).
                             8: state <= ABORT_SHOT;
                             default: begin
                                 status <= {ctrl[31], result_complete, 1'b1, 29'b0};
@@ -213,6 +254,7 @@ module ps_bridge #(
                         endcase
                     end
                 end
+                // Pulse cfg_begin / cfg_write / cfg_commit for one cycle, then await cfg_ack.
                 BEGIN_CONFIG, APPEND_EDGE, COMMIT_CONFIG: begin
                     state <= WAIT_CONFIG;
                 end
@@ -224,6 +266,7 @@ module ps_bridge #(
                         state <= IDLE;
                     end
                 end
+                // Assert in_valid until the core accepts the syndrome, then wait for out_valid.
                 LAUNCH: begin
                     if (in_ready)
                         state <= WAIT_RESULT;
@@ -238,6 +281,7 @@ module ps_bridge #(
                         state <= IDLE;
                     end
                 end
+                // Pulse shot_abort for one cycle, clear cached shot state, then acknowledge.
                 ABORT_SHOT: begin
                     shot <= 0;
                     written_words <= 0;

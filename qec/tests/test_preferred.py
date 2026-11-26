@@ -1,3 +1,5 @@
+"""Regression tests for `EditorLab` circuit layouts, logical diagram metadata, and memory runs."""
+
 from pathlib import Path
 
 import pytest
@@ -8,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_general_layout_preserves_gate_target_order():
+    """Two-qubit gates like CX keep their exact control-before-target order in the editor layout."""
     cfg = {
         "circuit": "R 0 1\nCX 1 0\nTICK\nX_ERROR(1) 0\nM 0 1\nDETECTOR rec[-2]",
         "reference": None,
@@ -20,6 +23,7 @@ def test_general_layout_preserves_gate_target_order():
 
 
 def test_memory_signature_cache_tracks_generated_circuit():
+    """Changing a memory circuit's round count updates cached fault signatures instead of returning stale values."""
     from qec.surface.model import Lab
 
     model = Lab()
@@ -31,6 +35,7 @@ def test_memory_signature_cache_tracks_generated_circuit():
 
 @pytest.mark.parametrize("logical", ["M(0.1) 0", "MR(0.1) 0"])
 def test_logical_display_rejects_measurement_noise(logical):
+    """Logical display circuits reject noisy measurement instructions."""
     settings = {
         "circuit": "R 0\nX_ERROR(1) 0\nM 0\nDETECTOR rec[-1]",
         "reference": None,
@@ -43,6 +48,7 @@ def test_logical_display_rejects_measurement_noise(logical):
 
 
 def test_optional_logical_clifford_metadata_and_rejection_before_serial():
+    """Valid logical Clifford metadata and bit-31 observables pass through, while invalid metadata fails before opening serial."""
     text = "R 0\nX_ERROR(1) 0\nM 0\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(31) rec[-1]"
     settings = {
         "circuit": text,
@@ -64,6 +70,7 @@ def test_optional_logical_clifford_metadata_and_rejection_before_serial():
 
 
 def test_editor_layout_and_real_memory_run():
+    """Default editor layout advertises graph-v2 and runs an injected memory fault to zero residual syndrome."""
     lab = EditorLab()
     layout = lab.layout()
     assert layout["protocol"] == "graph-v2"
@@ -80,6 +87,7 @@ def test_editor_layout_and_real_memory_run():
 
 @pytest.mark.parametrize("name,qubits", [("phase_bell", 2), ("two_repetition_echo", 6)])
 def test_general_editor_layout(name, qubits):
+    """Bare Stim fixtures render as generic circuit layouts whose final trace matches the result detectors."""
     response = EditorLab().circuit_run(
         {
             "circuit": (ROOT / f"qec/tests/fixtures/bare_{name}.stim").read_text(),

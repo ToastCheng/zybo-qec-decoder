@@ -1,4 +1,4 @@
-"""Replay custom-circuit injections without replacing the decoder graph."""
+"""Tests for single-shot fault injection and validation in CircuitExperiment."""
 
 import pytest
 import stim
@@ -7,6 +7,7 @@ from qec.surface.simulation import CircuitExperiment
 
 
 def settings(faults):
+    """Build a seeded one-qubit experiment config with the given fault injections."""
     return {
         "circuit": "R 0\nTICK\nX_ERROR(0.01) 0\nM 0\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(0) rec[-1]",
         "reference": None,
@@ -17,6 +18,7 @@ def settings(faults):
 
 
 def test_custom_injection_uses_same_shot_and_preserves_graph():
+    """Check that an injected X fault flips the syndrome and trace without altering the compiled decoder graph."""
     lab = CircuitExperiment()
     base = lab.run(settings([]))
     result = lab.run(settings([{"tick": 1, "qubit": 0, "pauli": "X"}]))
@@ -43,6 +45,7 @@ def test_custom_injection_uses_same_shot_and_preserves_graph():
     ],
 )
 def test_custom_fault_validation_precedes_hardware(faults, monkeypatch):
+    """Ensure invalid or out-of-range fault specs are rejected before opening a serial decoder."""
     def no_serial(*args, **kwargs):
         pytest.fail("Invalid injection must not open serial")
 

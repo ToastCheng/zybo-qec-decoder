@@ -1,21 +1,25 @@
+/**
+ * End-to-end headless Chrome test for the circuit editor, presets, custom
+ * Stim runs, and responsive layout (requires QEC_WEB_URL; skips otherwise).
+ *
+ * Drives Chrome over the DevTools Protocol to verify that preset selection and
+ * fault editing stay local, submitted circuits render every physical qubit and
+ * wire (up to 1024 qubits), replay controls never issue extra POSTs, and the
+ * lattice and bottom dock fit from 1280px down to 360px. When QEC_PRESETS_ONLY
+ * is set, runs only the built-in presets and checks for FPGA backend results.
+ */
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-/**
- * Wait before polling Chrome or checking that pause held the replay position.
- */
+
+// Small async sleep helper for polling Chrome startup and checking pause stability.
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test(
   "paper editor keeps circuit and every physical qubit visible",
   { skip: !process.env.QEC_WEB_URL, timeout: 90000 },
-  /**
-   * Exercise the paper editor against a live QEC web server. Check local presets
-   * and edits, responsive layout, and replay of submitted circuits. In
-   * presets-only mode, require FPGA results.
-   */
   async (t) => {
     const profile = fs.mkdtempSync(
       path.join(process.env.TMPDIR, "qec-circuit-chrome-"),
@@ -31,10 +35,7 @@ test(
     let log = "",
       socket;
     chrome.stderr.on("data", (data) => (log += data));
-    /**
-     * Close DevTools and remove this test's private Chrome profile after
-     * shutdown.
-     */
+    // Close the DevTools socket, kill Chrome, and remove its temporary profile.
     t.after(async () => {
       socket?.close();
       chrome.kill();
@@ -56,10 +57,7 @@ test(
     const pending = new Map(),
       posts = [],
       errors = [];
-    /**
-     * Settle DevTools commands by ID and collect POSTs and browser exceptions
-     * from before navigation.
-     */
+    // Route CDP replies by ID and record outgoing POST requests and uncaught page exceptions.
     socket.onmessage = ({ data }) => {
       const msg = JSON.parse(data);
       if (msg.id) {
@@ -76,20 +74,14 @@ test(
       else if (msg.method === "Runtime.exceptionThrown")
         errors.push(msg.params.exceptionDetails);
     };
-    /**
-     * Send a Chrome DevTools Protocol command and resolve it when its matching
-     * reply arrives.
-     */
+    // Send a CDP command and resolve with its reply.
     const cdp = (method, params = {}) =>
       new Promise((resolve, reject) => {
         const id = ++seq;
         pending.set(id, { resolve, reject });
         socket.send(JSON.stringify({ id, method, params }));
       });
-    /**
-     * Evaluate JavaScript in Chrome and return its value; fail the test on
-     * page-side exceptions.
-     */
+    // Evaluate JS in the page and fail if Chrome reports an exception.
     const js = async (expression) => {
       const result = await cdp("Runtime.evaluate", {
         expression,
@@ -102,10 +94,7 @@ test(
       );
       return result.result.value;
     };
-    /**
-     * Poll a page condition while layout or a run settles. Include the visible
-     * page text on timeout.
-     */
+    // Poll a page expression until truthy, dumping visible text on timeout.
     const until = async (expression, label) => {
       for (let i = 0; i < 300; i++) {
         if (await js(expression)) return;
@@ -113,10 +102,7 @@ test(
       }
       assert.fail(`${label}: ${await js("document.body.innerText")}`);
     };
-    /**
-     * Set a 1000px-tall test viewport and enable mobile emulation below 500px
-     * wide.
-     */
+    // Resize the emulated viewport to width x 1000 (enabling mobile mode under 500px).
     const viewport = (width) =>
       cdp("Emulation.setDeviceMetricsOverride", {
         width,
@@ -124,10 +110,7 @@ test(
         deviceScaleFactor: 1,
         mobile: width < 500,
       });
-    /**
-     * When capture is enabled, wait two animation frames and save a viewport PNG
-     * under QEC_SCREENSHOTS_DIR.
-     */
+    // Save a viewport PNG after two animation frames when QEC_SCREENSHOTS_DIR is set.
     const screenshot = async (name) => {
       if (!process.env.QEC_SCREENSHOTS_DIR) return;
       fs.mkdirSync(process.env.QEC_SCREENSHOTS_DIR, { recursive: true });
@@ -212,10 +195,7 @@ test(
       await js('document.querySelector("#scenario").textContent'),
       "No faults",
     );
-    /**
-     * Require the fixed bottom dock and every replay control to fit within the
-     * viewport.
-     */
+    // Check that the fixed bottom dock and all replay controls fit inside the viewport.
     const assertDockFits = async () => {
       await until(
         '(() => {const dock=document.querySelector("#control-dock").getBoundingClientRect();return dock.bottom<=innerHeight+1 && ["run","play","back","step","speed","scrubber"].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.top>=dock.top && r.bottom<=innerHeight})})()',
@@ -228,10 +208,7 @@ test(
         "fixed",
       );
     };
-    /**
-     * Require the preset lattice to fill its workspace and contain every qubit
-     * without scrolling or clipping.
-     */
+    // Check that a preset lattice fills its workspace with every qubit visible and no scrollbars.
     const assertPresetFits = async (name) => {
       await assertDockFits();
       await until(
@@ -487,10 +464,7 @@ test(
     await js(
       'document.querySelector("#circuit-template").value="custom";document.querySelector("#circuit-template").dispatchEvent(new Event("change"))',
     );
-    /**
-     * Enter the annotated circuit and optional logical text, explicitly Run, and
-     * require replay to become available.
-     */
+    // Fill the circuit (and optional logical) text, click Run, and wait for replay to unlock.
     const run = async (circuit, logical = "") => {
       await js(
         `document.querySelector('#circuit-text').value=${JSON.stringify(circuit)};document.querySelector('#logical-text').value=${JSON.stringify(logical)};document.querySelector('#circuit-text').dispatchEvent(new Event('input'));document.querySelector('#run').click()`,

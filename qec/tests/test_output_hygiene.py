@@ -1,4 +1,4 @@
-"""Keep generated files under build/."""
+"""Tests verifying that tool caches, build logs, and generated artifacts stay under `build/`."""
 
 import os
 import subprocess
@@ -10,12 +10,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_tool_caches_are_configured_under_build():
+    """pyproject.toml points pytest and Ruff caches into build/cache/."""
     config = tomllib.loads((ROOT / "pyproject.toml").read_text())
     assert config["tool"]["pytest"]["ini_options"]["cache_dir"] == "build/cache/pytest"
     assert config["tool"]["ruff"]["cache-dir"] == "build/cache/ruff"
 
 
 def test_pytest_does_not_create_a_root_cache(tmp_path):
+    """Running pytest against pyproject.toml writes its cache under build/ and not the repo root."""
     test = tmp_path / "test_smoke.py"
     test.write_text("def test_ok():\n    assert True\n")
     result = subprocess.run(
@@ -40,6 +42,7 @@ def test_pytest_does_not_create_a_root_cache(tmp_path):
 
 
 def test_fpga_tools_run_from_build_with_explicit_logs():
+    """Make dry-runs for build and firmware run from build/tools with explicit log and journal paths."""
     result = subprocess.run(
         ["make", "-n", "build", "firmware"],
         cwd=ROOT,
@@ -55,6 +58,7 @@ def test_fpga_tools_run_from_build_with_explicit_logs():
 
 
 def test_project_root_has_no_generated_tool_output():
+    """The repository root contains no leftover caches, simulator folders, or tool logs."""
     forbidden = {".pytest_cache", ".ruff_cache", ".Xil", "xsim.dir", "clockInfo.txt"}
     generated = [
         p.name

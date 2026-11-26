@@ -1,5 +1,5 @@
-# Experimental fixed matching image; maintained UF build remains unchanged.
-# Build a fresh image with optional detector, edge and observable capacities.
+# Build the fixed d3/r3 Z-memory exact matching Vivado image (Zybo Z7-10).
+# Fixed capacities: 24 detectors, 78 edges, 1 observable (frozen weights in ops.svh).
 set root [file normalize [file join [file dirname [info script]] .. .. ..]]
 if {[llength $argv] > 4} {
     error "Usage: build.tcl ?new-output-dir? ?max-detectors? ?max-edges? ?max-observables?"
@@ -9,7 +9,7 @@ if {$output_arg eq ""} {
     set output_arg build/matching-board/image
 }
 set output_dir [file normalize [file join $root $output_arg]]
-# Refuse protected paths and nonempty outputs rather than replacing artifacts.
+# Refuse the repo root, build root, or any nonempty directory to avoid overwriting artifacts.
 set build_root [file join $root build]
 if {$output_dir eq $root || $output_dir eq $build_root ||
     [string first "$output_dir/" "$root/"] == 0 ||
@@ -59,7 +59,7 @@ validate_bd_design
 generate_target all [get_files system.bd]
 set wrapper [make_wrapper -files [get_files system.bd] -top]
 add_files -norecurse $wrapper
-# Add only the decoder and mailbox sources.
+# Wire up the fixed-graph matching core, adapter, and bridge (plus include_dirs for .svh).
 set matching_dir [file join $root fpga experimental matching]
 foreach source {adapter.sv ps_bridge.sv matching_exact.sv} {
     add_files -norecurse [file join $matching_dir $source]
@@ -80,7 +80,7 @@ report_utilization -file [file join $output_dir qec_soc_utilization.rpt]
 report_timing_summary -delay_type min_max -report_unconstrained \
     -file [file join $output_dir qec_soc_timing_summary.rpt]
 report_drc -file [file join $output_dir qec_soc_drc.rpt]
-# Require routed setup and hold paths before exporting an image.
+# Gate bitstream/XSA export on non-negative routed setup (max) and hold (min) slack.
 foreach delay_type {max min} {
     set paths [get_timing_paths -delay_type $delay_type -max_paths 1]
     if {[llength $paths] == 0} {

@@ -1,4 +1,12 @@
-"""Reject missing coverage or failing routed setup and hold timing."""
+"""Verify setup and hold timing closure in a Vivado post-route timing summary report.
+
+Reads a Vivado `timing_summary.rpt` file and prints a `PASS` line with WNS/WHS,
+or exits with status 1 if the report is not post-route, has zero endpoint
+coverage, negative slack, or any failing endpoints.
+
+Usage:
+    python3 scripts/verify_timing.py <path/to/timing_summary.rpt>
+"""
 
 import argparse
 import re
@@ -6,6 +14,11 @@ from pathlib import Path
 
 
 def verify_report(path):
+    """Validate a Vivado post-route timing report and return a PASS summary with WNS and WHS.
+
+    Raises ValueError if the post-route marker or summary row is missing,
+    endpoint counts are zero, either slack is negative, or any endpoint fails.
+    """
     text = Path(path).read_text()
     if "Design State : Physopt postRoute" not in text:
         raise ValueError("expected actual post-route timing summary")
@@ -29,6 +42,7 @@ def verify_report(path):
 
 
 def main():
+    """Parse the report path from CLI arguments and exit 1 if timing validation fails."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
     args = parser.parse_args()

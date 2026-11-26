@@ -1,14 +1,19 @@
-"""Fixed d=3 rotated-surface-code experiments, not a logical compiler.
+"""Distance-3 rotated surface-code circuit builders for Bell and GHZ echo presets.
 
-Each patch has nine data and eight reusable extraction ancillas. Interpatch
-CNOTs assume nonlocal, pairwise data-data couplers; they are not lattice surgery.
-The four-layer hook-safe extraction schedule is Stim's rotated-memory schedule.
-No S gadget is claimed: the Bell experiment is the ordinary (XX, ZZ) Bell state.
+Each logical qubit is a ``d=3`` rotated surface-code patch with 9 data qubits
+and 8 reusable ancillas extracted using Stim's four-layer hook-safe CNOT
+schedule. Interpatch CNOTs are transversal (direct pairwise CNOTs between
+matching data qubits) rather than lattice surgery, and neither preset includes
+an encoded S gate: the Bell preset prepares and measures the standard (XX, ZZ)
+Bell state, while the echo preset runs two parallel 3-patch GHZ prepare and
+uncompute chains.
 """
 
 import stim
 
-# Stim's d=3 rotated layout, reindexed densely to 0..16 within each patch.
+# Qubit site IDs from Stim's d=3 rotated surface-code layout, remapped densely
+# to 0..16 within each patch. _LAYERS is the four-step CNOT extraction schedule
+# that avoids hook errors propagating into logical faults.
 _SITES = (1, 2, 3, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 25)
 _DATA = (1, 3, 5, 8, 10, 12, 15, 17, 19)
 _ANC = (2, 9, 11, 13, 14, 16, 18, 25)
@@ -22,7 +27,24 @@ _LAYERS = (
 
 
 class _Experiment:
+    """Builder for multi-patch d=3 rotated surface-code circuits.
+
+    Maintains ``self.previous[(patch, ancilla)]`` as the set of absolute
+    measurement record indices whose parity gives each stabilizer's expected
+    outcome: an empty set means a known +1 eigenstate at initialization, while
+    ``None`` means the check anticommutes with the preparation basis and has a
+    random first readout. Extraction rounds and transversal CNOTs update these
+    parity sets before emitting ``DETECTOR`` instructions.
+    """
+
     def __init__(self, bases, noise, noise_model):
+        """Initialize patches in the given X/Z bases and reset all ancillas.
+
+        ``bases`` is a sequence of ``"X"`` or ``"Z"`` strings, one per patch.
+        ``noise`` must be in ``[0, 0.75]`` and ``noise_model`` must be
+        ``"phenomenological"`` (ideal resets) or ``"circuit_level"`` (noisy
+        resets when ``noise > 0``).
+        """
         if not 0 <= noise <= 0.75:
             raise ValueError("noise must be in [0, 0.75]")
         if noise_model not in ("phenomenological", "circuit_level"):
@@ -42,7 +64,7 @@ class _Experiment:
                 self.supports[a].append(d)
         for patch, basis in enumerate(bases):
             for site in _SITES:
-                # Same integer-lattice coordinates as Stim, tiled with a gap.
+                # Match Stim's 2D lattice coordinates, offsetting each patch by 8 columns.
                 x = site % 7
                 y = 2 * (site // 7) + (site in _DATA)
                 self.circuit.append(
@@ -58,19 +80,26 @@ class _Experiment:
                 )
                 self.circuit.append("X_ERROR", anc, noise)
             for a in _ANC:
-                # The complementary checks are initially random, not detectors.
+                # Checks in the opposite basis to preparation start in a random eigenstate.
                 self.previous[patch, a] = set() if self.basis(a) == basis else None
         self.circuit.append("TICK")
 
     @staticmethod
     def q(patch, site):
+        """Convert a Stim layout site ID to a dense qubit index for ``patch``."""
         return 17 * patch + _SITES.index(site)
 
     @staticmethod
     def basis(ancilla):
+        """Return ``"X"`` or ``"Z"`` for the stabilizer measured by ``ancilla``."""
         return "X" if ancilla in _X_ANC else "Z"
 
     def detector(self, patch, ancilla, records):
+        """Emit a ``DETECTOR`` at the check's ``(x, y, time)`` coordinate.
+
+        Converts absolute zero-based ``records`` indices into Stim's relative
+        negative ``rec[...]`` lookbacks from ``self.records``.
+        """
         targets = [stim.target_rec(r - self.records) for r in sorted(records)]
         self.circuit.append(
             "DETECTOR",
@@ -79,11 +108,19 @@ class _Experiment:
         )
 
     def extract(self, rounds=3):
-        """Measure all eight checks, comparing to propagated previous signs."""
+        """Append ``rounds`` full syndrome-extraction cycles across all patches.
+
+        Each cycle applies Hadamards on X ancillas, the four CNOT layers,
+        Hadamards back, and ``MR`` on all ancillas, emitting a detector whenever
+        the check had a known prior parity. Under ``phenomenological`` noise,
+        the final round's ancilla readout is kept noiseless so a following
+        transversal ``cx`` can XOR those check records without creating
+        hyperedges in the decoding graph.
+        """
         for round_index in range(rounds):
             data = [self.q(p, d) for p in range(len(self.bases)) for d in _DATA]
             if self.noise_model == "phenomenological":
-                # Separate CSS channels: Y is a two-fault event, not a single fault.
+                # Apply X and Z independently so Y faults are two separate CSS events.
                 self.circuit.append("X_ERROR", data, self.noise)
                 self.circuit.append("Z_ERROR", data, self.noise)
             xs = [self.q(p, a) for p in range(len(self.bases)) for a in _X_ANC]
@@ -102,7 +139,7 @@ class _Experiment:
                 self.circuit.append("DEPOLARIZE1", xs, self.gate_noise)
             self.circuit.append("TICK")
             for patch in range(len(self.bases)):
-                # Final check records must be exact before their CX fan-out.
+                # Under phenomenological noise, keep the last round's readout exact before CX.
                 measurement_noise = (
                     self.noise if self.gate_noise or round_index < rounds - 1 else 0
                 )
@@ -127,12 +164,18 @@ class _Experiment:
             self.time += 1
 
     def cx(self, control, target):
+        """Append a transversal CNOT between ``control`` and ``target`` patches.
+
+        Must be called after ``extract()`` so every check has a concrete prior
+        measurement record. Updates expected check parities to match Pauli
+        propagation under CNOT: target X checks XOR into control X checks, and
+        control Z checks XOR into target Z checks.
+        """
         pairs = [self.q(p, d) for d in _DATA for p in (control, target)]
         self.circuit.append("CX", pairs)
         if self.gate_noise:
             self.circuit.append("DEPOLARIZE2", pairs, self.gate_noise)
-        # Individual check signs transform exactly like logical Paulis. Comparing
-        # each patch only to itself here would produce nondeterministic checks.
+        # Stabilizers transform across transversal CX the same way logical Paulis do.
         for a in _ANC:
             destination, source = (
                 (control, target) if self.basis(a) == "X" else (target, control)
@@ -143,6 +186,12 @@ class _Experiment:
         self.circuit.append("TICK")
 
     def readout(self):
+        """Measure all data qubits in their preparation basis and return the circuit.
+
+        Closes final detectors for checks matching each patch's readout basis by
+        comparing the data-qubit support parity against the latest ancilla
+        record, then registers one logical observable per patch.
+        """
         for patch, basis in enumerate(self.bases):
             self.circuit.append(
                 "MX" if basis == "X" else "M",
@@ -159,7 +208,7 @@ class _Experiment:
                         {data_records[d] for d in self.supports[a]}
                         ^ self.previous[patch, a],
                     )
-            # X logical: left column; Z logical: top row in this orientation.
+            # Logical X runs down the left column; logical Z across the top row.
             logical = (1, 8, 15) if basis == "X" else (1, 3, 5)
             self.circuit.append(
                 "OBSERVABLE_INCLUDE",
@@ -170,17 +219,23 @@ class _Experiment:
 
 
 def examples(noise=0.001, noise_model="phenomenological"):
-    """Return editor records: id, label, physical circuit, logical Stim metadata.
+    """Build the Bell and 6-patch GHZ echo preset records for the web editor.
 
-    A zero-noise request stays noiseless; callers needing a graph must explicitly
-    request a compatible noisy reference, e.g. examples(noise=0.001).
+    Returns a list of dicts containing each preset's ID, label, Stim circuit
+    text, display-only logical circuit, and noise/coupling metadata. Only the
+    ``phenomenological`` model produces a graph-like error model compatible
+    with the unweighted decoder; ``circuit_level`` includes correlated CNOT
+    faults and is flagged ``decoder_compatible: False``.
+
+    Passing ``noise=0`` keeps the circuits noiseless; callers that need a
+    decoding graph should pass a nonzero rate such as the default ``0.001``.
     """
     bell = _Experiment(("X", "Z"), noise, noise_model)
     bell.extract()
     bell.cx(0, 1)
     bell.extract()
-    # Destructive encoded Bell analyzer: CX then separate X/Z readouts.
-    # These outcomes are the pre-analyzer commuting logical XX and ZZ parities.
+    # Transversal CX followed by X/Z readouts acts as a destructive Bell
+    # analyzer, measuring the pre-analyzer logical XX and ZZ parities.
     bell.cx(0, 1)
     bell.extract()
     echo = _Experiment(("X", "Z", "Z", "X", "Z", "Z"), noise, noise_model)

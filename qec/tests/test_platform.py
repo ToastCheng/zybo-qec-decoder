@@ -1,4 +1,7 @@
-"""Compile and exercise the production UART/GPIO adapter against a native BSP."""
+"""Tests for the Vitis firmware platform adapter and build script.
+
+Compiles `fpga/vitis/src/main.c` against native BSP stubs and checks the Vitis CMake build flow.
+"""
 
 import os
 import runpy
@@ -163,6 +166,7 @@ int main(int argc, char **argv) {
 
 
 def write_bsp_stubs(directory):
+    """Write minimal native BSP header shims into `directory` for host compilation."""
     directory.mkdir(parents=True, exist_ok=True)
     for name in [
         "bsp.h",
@@ -177,6 +181,7 @@ def write_bsp_stubs(directory):
 
 @pytest.fixture
 def native_platform(tmp_path):
+    """Compile the native C test harness with ASan and UBSan enabled."""
     write_bsp_stubs(tmp_path)
     harness = tmp_path / "platform.c"
     harness.write_text(HARNESS)
@@ -212,6 +217,7 @@ def native_platform(tmp_path):
 
 @pytest.mark.parametrize("mode", ["platform", "main", "f1", "f2", "f3"])
 def test_production_platform_with_native_bsp(native_platform, mode):
+    """Native BSP harness passes normal platform/main flows and exits non-zero on UART init failures."""
     result = subprocess.run(
         [str(native_platform), mode], capture_output=True, text=True, check=False
     )
@@ -220,6 +226,7 @@ def test_production_platform_with_native_bsp(native_platform, mode):
 
 
 def test_builder_rejects_missing_platform_header_before_vendor(tmp_path, monkeypatch):
+    """Firmware builder fails fast when `platform.h` is missing, before importing `vitis`."""
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
@@ -245,7 +252,7 @@ def test_builder_rejects_missing_platform_header_before_vendor(tmp_path, monkeyp
 def test_builder_selects_real_header_with_cmake_and_keeps_sources(
     tmp_path, monkeypatch
 ):
-    """Check generated CMake flags with the native compiler, not an ARM linker."""
+    """Firmware builder generates valid CMake config, compiles natively, and leaves source files untouched."""
     before = {p: p.read_bytes() for p in SOURCE.iterdir() if p.is_file()}
     image = tmp_path / "image"
     image.mkdir()
@@ -253,6 +260,7 @@ def test_builder_selects_real_header_with_cmake_and_keeps_sources(
     events = []
 
     class Component:
+        """Fake Vitis component that checks generated CMake files via a native object build."""
         def __init__(self, name, workspace):
             self.name = name
             self.base = workspace / name
@@ -262,8 +270,7 @@ def test_builder_selects_real_header_with_cmake_and_keeps_sources(
             if self.name == "qec_platform":
                 target = self.base / "export/qec_platform/qec_platform.xpfm"
             else:
-                # Compile the generated configuration with native CMake.
-                # Build an object file; this is not an ARM link test.
+                # Compile an object file natively to verify UserConfig.cmake (not an ARM link test).
                 write_bsp_stubs(self.base / "bsp")
                 (self.base / "CMakeLists.txt").write_text(
                     "cmake_minimum_required(VERSION 3.16)\nproject(native_probe C)\n"
@@ -292,6 +299,7 @@ def test_builder_selects_real_header_with_cmake_and_keeps_sources(
             shutil.copytree(SOURCE, self.base / "src", dirs_exist_ok=True)
 
     class Client:
+        """Fake Vitis client returning stub platform and application components."""
         def set_workspace(self, path):
             self.workspace = Path(path)
 

@@ -1,4 +1,10 @@
-"""Connect editor experiments to graph loading and trace rendering."""
+"""Coordinate circuit layouts, presets, and software or FPGA runs for the web UI.
+
+This module adapts both ``Lab`` (generated rotated Z-memory experiments) and
+``CircuitExperiment`` (arbitrary annotated Stim circuits) into the common layout,
+trace, and hardware-telemetry structures consumed by ``web.py`` and the browser
+frontend.
+"""
 
 import stim
 
@@ -8,6 +14,13 @@ from qec.surface.simulation import CircuitExperiment
 
 
 def _hardware(experiment):
+    """Package FPGA run telemetry for the UI, or return ``None`` for software runs.
+
+    Extracts the wire bytes of the final decode frame (opcode 5) along with the
+    full UART transaction log and per-window chunk breakdown. ``cycles`` is the
+    sum of FPGA core decode cycles across windows and excludes graph uploads and
+    UART transfer time.
+    """
     if experiment["source"] != "FPGA":
         return None
     transaction = next(
@@ -26,10 +39,14 @@ def _hardware(experiment):
 
 
 def _checks(circuit):
-    """Read reusable extraction ancillas and their actual data-CX neighbors.
+    """Extract reusable stabilizer ancillas and their data-qubit supports.
 
-    Call only for a recognized encoded experiment or generated memory. Coordinates
-    alone are not evidence that an arbitrary physical circuit is a surface code.
+    Finds ancillas as qubits that appear in both ``R`` and ``MR``, classifies X
+    checks from the initial ``H`` gates before the first ``MR``, and collects
+    each ancilla's data neighbors from ``CX`` pairs. Call this only on
+    recognized surface-code circuits (generated Z-memory or matched encoded
+    presets), since arbitrary Stim circuits do not necessarily follow this
+    stabilizer pattern.
     """
     operations = list(circuit.flattened())
     ancillas = {
@@ -78,7 +95,14 @@ def _checks(circuit):
 
 
 def _detector_grid(layout):
-    """Keep measurement-boundary columns independent from physical gate ticks."""
+    """Assign each detector to a ``(row, boundary)`` cell for the UI grid.
+
+    Rows match stabilizer checks by 2D spatial coordinate when available (falling
+    back to raw coordinates or ``D<id>``). Columns ("boundaries") group
+    detectors by measurement round using their time coordinate ``coords[2:]``
+    when present, or ``available_tick`` otherwise, so final data readout and
+    ancilla measurements that share a physical tick stay in separate columns.
+    """
     checks = {
         tuple(q["coords"][:2]): q for q in layout["checks"] if len(q["coords"]) >= 2
     }
@@ -101,9 +125,9 @@ def _detector_grid(layout):
             row_id = label = f"D{detector['id']}"
         rows.setdefault(row_id, {"id": row_id, "label": label})
         detector["row"] = row_id
-        # Detector coordinate time is authoritative; tick fallback only when
-        # no temporal coordinate exists. Final data and ancilla readouts may
-        # share a tick, so using tick alone would merge distinct boundaries.
+        # Prefer the detector's time coordinate over its tick index: final data
+        # readout and the last ancilla round can land on the same tick even
+        # though they belong to different measurement rounds.
         key = (
             ("time", *coords[2:])
             if len(coords) >= 3
@@ -126,6 +150,7 @@ def _detector_grid(layout):
 
 
 def _memory_layout(model):
+    """Add check supports, mapping metadata, and a detector grid to ``model.layout()``."""
     layout = model.layout()
     layout.update(
         checks=_checks(model.clean),
@@ -136,6 +161,15 @@ def _memory_layout(model):
 
 
 def _layout(circuit, source, logical=None):
+    """Build UI layout metadata from a Stim circuit without running a simulation.
+
+    Extracts per-tick operations with typed targets, qubit and detector
+    coordinates, and detector grid placement. If ``logical`` is supplied and
+    matches one of the known presets in ``encoded.examples()`` (along with the
+    noise-stripped physical circuit), populates stabilizer check supports and
+    sets ``mapping_verified=True``; otherwise treats all qubits as generic data
+    qubits and leaves the mapping unverified.
+    """
     ticks = [{"id": 0, "operations": []}]
     used = set()
     detectors = []
@@ -230,12 +264,18 @@ def _layout(circuit, source, logical=None):
 
 
 class EditorLab:
-    """Keep initial layout and rejected requests free of serial access."""
+    """Facade used by the HTTP server to serve layouts and run experiments.
+
+    Keeps initial layout requests and rejected inputs free of serial I/O by
+    opening the FPGA UART only when an actual run executes.
+    """
 
     def __init__(self, serial_port=None):
+        """Store an optional FPGA UART device path without opening it."""
         self.serial_port = serial_port
 
     def layout(self):
+        """Return the default Z-memory layout and encoded preset previews without serial I/O."""
         from qec.surface.encoded import examples
 
         model = Lab()
@@ -264,10 +304,18 @@ class EditorLab:
         return layout
 
     def run(self, settings):
+        """Run a generated Z-memory shot and return its layout, trace, and decode data.
+
+        Uses the FPGA when ``serial_port`` is configured, uploading the shot's
+        compiled graph before decoding; otherwise runs the software decoder.
+        Any physical correction returned in the payload is a host-computed
+        representative rather than an output of the FPGA decoder.
+        """
         model = Lab()
         experiment = {"source": "Software", "transactions": []}
 
         def measured(syndrome):
+            """Upload the shot's graph to the FPGA, decode ``syndrome``, and log UART frames."""
             compiled = model.compiled
             with GraphDecoder(self.serial_port) as board:
                 identity = board.identity()
@@ -325,6 +373,13 @@ class EditorLab:
         return result
 
     def circuit_run(self, settings):
+        """Run an arbitrary annotated Stim circuit and format its trace for the UI.
+
+        Delegates compilation, simulation, and decoding to ``CircuitExperiment``,
+        then reshapes the tick trace and layout to match ``run()``. Physical
+        correction and residual fields are left empty because host GF(2)
+        correction overlays are only computed for the fixed Z-memory lab.
+        """
         experiment = CircuitExperiment(self.serial_port).run(settings)
         layout = _layout(
             stim.Circuit(experiment["compiled"]["circuit"]),

@@ -1,3 +1,5 @@
+"""HTTP API and security tests for the web server in `qec.surface.web`."""
+
 import http.client
 import json
 import threading
@@ -11,6 +13,7 @@ from qec.surface.web import make_server
 
 @contextmanager
 def server(serial_port=None, public_origin=None):
+    """Start the HTTP server on an ephemeral port and stop it cleanly when the context exits."""
     service = make_server(0, serial_port, public_origin=public_origin)
     thread = threading.Thread(target=service.serve_forever)
     thread.start()
@@ -23,6 +26,7 @@ def server(serial_port=None, public_origin=None):
 
 
 def request(port, method, path, body=None, **headers):
+    """Send an HTTP request to localhost on `port` and return `(status, body_bytes)`."""
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
     connection.request(method, path, body, headers)
     response = connection.getresponse()
@@ -33,6 +37,7 @@ def request(port, method, path, body=None, **headers):
 
 
 def test_canonical_routes_and_error_recovery():
+    """Valid routes serve assets and run experiments normally even after 400, 403, 404, and 413 errors."""
     with server() as port:
         status, raw = request(port, "GET", "/api/layout")
         layout = json.loads(raw)
@@ -74,6 +79,7 @@ def test_canonical_routes_and_error_recovery():
 
 
 def test_explicit_public_origin_serves_assets_and_runs():
+    """Configuring a public HTTPS origin permits matching Host/Origin requests alongside loopback access."""
     origin = "https://qec.toastcheng.com"
     with server(public_origin=origin) as port:
         headers = {"Host": "qec.toastcheng.com", "Origin": origin}
@@ -89,6 +95,7 @@ def test_explicit_public_origin_serves_assets_and_runs():
 
 
 def test_public_origin_does_not_weaken_host_or_origin_checks():
+    """Mismatched, forwarded, or duplicate Host/Origin headers are rejected with 403 even with a public origin."""
     origin = "https://qec.toastcheng.com"
     with server() as port:
         assert request(port, "GET", "/", Host="qec.toastcheng.com")[0] == 403
@@ -130,11 +137,13 @@ def test_public_origin_does_not_weaken_host_or_origin_checks():
     "https://qec.toastcheng.com\n", "https://", "null",
 ])
 def test_invalid_public_origins_are_rejected(origin):
+    """Non-HTTPS or malformed public origin strings raise ValueError on server creation."""
     with pytest.raises(ValueError):
         make_server(0, public_origin=origin)
 
 
 def test_layout_and_invalid_runs_never_open_serial():
+    """Layout queries advertise FPGA mode and invalid run requests return 400 without opening the serial port."""
     with server("/no/such/serial/device") as port:
         status, raw = request(port, "GET", "/api/layout")
         assert status == 200 and json.loads(raw)["source"] == "FPGA"

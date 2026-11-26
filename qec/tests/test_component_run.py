@@ -1,4 +1,4 @@
-"""Multiple exact graph windows can share one loaded FPGA image."""
+"""Tests for splitting disconnected decoder graphs across capacity-limited hardware loads."""
 
 from types import SimpleNamespace
 
@@ -7,9 +7,11 @@ from qec.surface.simulation import CircuitExperiment
 
 
 def test_disconnected_graph_uses_measured_component_decodes(monkeypatch):
+    """Check that disconnected graphs split across hardware loads and sum predictions and cycle counts."""
     loads = []
 
     class Board:
+        """Fake hardware decoder capped at 2 detectors and 2 edges per load."""
         def __init__(self, port):
             self.transactions = []
 

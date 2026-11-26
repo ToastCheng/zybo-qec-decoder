@@ -1,4 +1,4 @@
-"""Run the decoder, mailbox and cycle-counter benches with Vivado."""
+"""Vivado RTL simulation tests for the decoder core, cycle counter, and mailbox bridge."""
 
 import os
 import subprocess
@@ -14,7 +14,9 @@ VIVADO_BIN = Path(
 
 
 class RtlTests(unittest.TestCase):
+    """Execute hardware testbenches in Vivado xsim when the toolchain is available."""
     def run_bench(self, bench):
+        """Run one RTL bench in an isolated build directory, skipping if Vivado tools are missing."""
         if not all(
             (VIVADO_BIN / tool).is_file() for tool in ("xvlog", "xelab", "xsim")
         ):
@@ -44,12 +46,15 @@ class RtlTests(unittest.TestCase):
         print(f"{bench}: {build}")
 
     def test_core_matches_reference_across_qec_graphs(self):
+        """Decoder core RTL predictions match the software reference across the QEC graph suite."""
         self.run_bench("core")
 
     def test_mailbox_cycles_cross_16_bit_boundary(self):
+        """Mailbox cycle counter reports counts accurately past the 16-bit boundary (> 65535)."""
         self.run_bench("counter")
 
     def test_mailbox_rejects_invalid_then_recovers(self):
+        """Mailbox bridge rejects an invalid transaction and still processes the next valid one."""
         self.run_bench("bridge")
 
 

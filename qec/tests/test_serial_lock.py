@@ -1,4 +1,4 @@
-"""Reject live serial-monitor locks without changing them."""
+"""Tests for serial port lock detection in `qec.surface.host`, ensuring existing locks are respected and never deleted."""
 
 import os
 
@@ -8,6 +8,7 @@ from qec.surface import host
 
 
 def test_live_lock_is_reported(tmp_path):
+    """An active PID lock file is detected and left intact on disk."""
     lock = tmp_path / "LCK..ttyUSB1"
     lock.write_text(f"{os.getpid():10d}\n")
     assert host.serial_lock_owner("/dev/ttyUSB1", (tmp_path,)) == os.getpid()
@@ -15,6 +16,7 @@ def test_live_lock_is_reported(tmp_path):
 
 
 def test_stale_or_malformed_lock_is_not_removed(tmp_path, monkeypatch):
+    """Stale PIDs and malformed lock files are ignored without deleting or modifying the file."""
     lock = tmp_path / "LCK..ttyUSB1"
     lock.write_text("12345\n")
 
@@ -29,6 +31,7 @@ def test_stale_or_malformed_lock_is_not_removed(tmp_path, monkeypatch):
 
 
 def test_monitor_lock_rejects_before_serial_open(monkeypatch):
+    """A live serial monitor lock raises ProtocolError with the owner PID before pySerial opens the port."""
     monkeypatch.setattr(host, "serial_lock_owner", lambda port: 12345)
 
     def forbidden(*args, **kwargs):

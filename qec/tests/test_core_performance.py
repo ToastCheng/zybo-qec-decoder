@@ -1,4 +1,4 @@
-"""Guard real acceptance-to-result costs on frozen, nonempty Stim shots."""
+"""RTL simulation regression tests checking cycle budgets on archived surface-code shots."""
 
 import csv
 import json
@@ -17,6 +17,7 @@ NAMES = ("memory-d3-z-r3", "memory-d3-x-r5", "memory-d5-z-r3")
 
 @pytest.fixture(scope="module")
 def measured_corpus():
+    """Simulate archived board shots in Vivado and return paired baseline and RTL cycle measurements."""
     vivado = Path(
         os.environ.get("VIVADO_BIN", "/home/toastcheng/amd/2025.2/Vivado/bin")
     )
@@ -71,7 +72,7 @@ def measured_corpus():
 
 
 def test_nonempty_serial_scan_budget(measured_corpus):
-    """Reduce nonempty total clocks >=15%, without changing any prediction."""
+    """Verify that nonempty syndromes use at least 15% fewer total cycles than the archived baseline."""
     archived, measured = measured_corpus
     for name, before, after in zip(NAMES, archived, measured):
         baseline = sum(r["cycles"] for r in before if r["syndrome"])
@@ -80,7 +81,7 @@ def test_nonempty_serial_scan_budget(measured_corpus):
 
 
 def test_valid_empty_shot_completes_in_one_clock(measured_corpus):
-    """A validated zero syndrome needs no mutable graph/work scan."""
+    """Verify that every all-zero syndrome finishes in exactly 1 clock cycle."""
     _, measured = measured_corpus
     empty = [r for rows in measured for r in rows if int(r["syndrome"], 16) == 0]
     assert empty

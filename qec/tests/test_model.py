@@ -1,3 +1,5 @@
+"""Tests for fault injection, tick traces, and layout generation in `qec.surface.model.Lab`."""
+
 import importlib.util
 import random
 
@@ -6,6 +8,7 @@ import stim
 
 
 def lab():
+    """Build the default `Lab` instance after confirming the web module is present."""
     assert importlib.util.find_spec("qec.surface.web") is not None, (
         "interactive lab is missing"
     )
@@ -15,6 +18,7 @@ def lab():
 
 
 def test_tick_faults_replay_real_circuit_without_future_detectors():
+    """Faults appear at their injected ticks and detectors stay hidden until their available tick."""
     model = lab()
     layout = model.layout()
     assert "ticks" in layout, "circuit TICK replay is missing"
@@ -42,6 +46,7 @@ def test_tick_faults_replay_real_circuit_without_future_detectors():
 
 
 def test_fpga_prediction_drives_host_frame_and_failure_never_falls_back():
+    """FPGA predictions drive the host frame, while board I/O errors propagate without fallback."""
     from qec.surface.model import Lab
 
     calls = []
@@ -67,6 +72,7 @@ def test_fpga_prediction_drives_host_frame_and_failure_never_falls_back():
 
 
 def test_tick_correction_is_independently_replayed_and_frames_propagate():
+    """Injected faults propagate through Pauli frames, replay cleanly after correction, and reject bad inputs."""
     model = lab()
     fault = {"tick": 8, "qubit": 10, "pauli": "X"}
     result = model.simulate_faults([fault])
@@ -103,6 +109,7 @@ def test_tick_correction_is_independently_replayed_and_frames_propagate():
 
 
 def test_cli_accepts_explicit_serial_source():
+    """Layout source reflects the configured decoder and the web CLI accepts `--serial-port`."""
     import subprocess
 
     from qec.surface.model import Lab
@@ -119,6 +126,7 @@ def test_cli_accepts_explicit_serial_source():
 
 
 def test_multitime_replay_and_zero_syndrome_logical_chain():
+    """Multi-tick faults compose by XOR, undetectable logical chains fail, and internal caches stay bounded."""
     model = lab()
     result = model.simulate_faults(
         [{"tick": 8, "qubit": q, "pauli": "X"} for q in [1, 8, 15]]
@@ -151,6 +159,7 @@ def test_multitime_replay_and_zero_syndrome_logical_chain():
 
 
 def test_configured_hardware_cannot_silently_become_simulated():
+    """Invalid FPGA responses raise an I/O error rather than falling back to software simulation."""
     from qec.surface.model import Lab
 
     for invalid in [
@@ -164,6 +173,7 @@ def test_configured_hardware_cannot_silently_become_simulated():
 
 
 def test_layout_is_derived_from_stim():
+    """Default lattice coordinates, check supports, and detector time slices match the Stim circuit."""
     model = lab().layout()
     assert model["injection"] == "Before selected tick operations"
     assert len(model["data"]) == 9

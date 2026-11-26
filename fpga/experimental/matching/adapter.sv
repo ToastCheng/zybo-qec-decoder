@@ -1,7 +1,10 @@
 `timescale 1ns/1ps
-// Experimental fixed graph, NOT a runtime matching graph loader.
-// The upload is an ordered topology/mask identity check. Weights are immutable
-// binary64-exact integers in ops.svh; the dedicated host verifies graph SHA256.
+// Configuration and shot-interface wrapper around the fixed d3/r3 Z-memory
+// exact matching core (24 detectors, 78 edges, 1 observable).
+//
+// Edge weights are frozen in ops.svh at synthesis time, so this adapter acts
+// as an identity gate: decoding stays disarmed (configured=0) until the host
+// uploads all 78 edges matching graph_identity.svh in exact order.
 module qec_decoder #(
     parameter integer MAX_DETECTORS = 24,
     parameter integer MAX_EDGES = 78,
@@ -52,8 +55,8 @@ module qec_decoder #(
     assign in_ready = configured && exact_ready && !request && !shot_abort && !rst;
     assign out_valid = exact_valid && !shot_abort;
     assign prediction = {{(MAX_OBSERVABLES-1){1'b0}}, exact_prediction};
-    // A genuinely independent counter is checked against the core counter.
-    // Start after acceptance, stop at final logical result; exclude retirement.
+    // Cross-check the core's cycle counter against an independent counter that
+    // runs from shot acceptance to out_valid (excluding output hold cycles).
     assign cycles = exact_cycles;
     assign decode_error = exact_valid && (measured_cycles != exact_cycles);
     matching_exact exact (
@@ -75,6 +78,8 @@ module qec_decoder #(
             busy <= 0;
         end
     end
+    // Graph-identity gate: verify dimensions (24/78/1) and every uploaded edge
+    // against graph_identity.svh. Any mismatch sets poisoned and fails commit.
     always_ff @(posedge clk) begin
         if (rst) begin
             loading <= 0;

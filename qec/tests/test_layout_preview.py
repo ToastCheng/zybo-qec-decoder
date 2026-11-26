@@ -1,4 +1,4 @@
-"""Display metadata is available before any experiment or hardware transaction."""
+"""Tests for serial-free circuit layout previews, qubit partitioning, and detector grids."""
 
 import pytest
 import stim
@@ -8,6 +8,7 @@ from qec.surface.encoded import examples
 
 
 def test_encoded_previews_partition_actual_qubits_without_running(monkeypatch):
+    """Check that encoded layout previews derive data qubits, check supports, and bases without simulation or serial I/O."""
     def forbidden(*args, **kwargs):
         pytest.fail("preview attempted simulation or serial access")
 
@@ -34,7 +35,7 @@ def test_encoded_previews_partition_actual_qubits_without_running(monkeypatch):
         assert not data & checks
         assert data | checks == used == set(range(count))
         assert len(layout["data"]) + len(layout["checks"]) == count
-        # Read actual extraction operations independently of the metadata builder.
+        # Inspect the first extraction round directly to cross-check the layout metadata.
         first_round = []
         for op in circuit.flattened():
             if op.name == "MR":
@@ -60,6 +61,7 @@ def test_encoded_previews_partition_actual_qubits_without_running(monkeypatch):
 
 
 def assert_detector_grid(layout):
+    """Assert that a layout's detector grid has unique cells, ordered round boundaries, and valid tick timings."""
     rows = {row["id"]: row for row in layout["rows"]}
     boundaries = {boundary["id"]: boundary for boundary in layout["boundaries"]}
     assert len(rows) == len(layout["rows"])
@@ -82,6 +84,7 @@ def assert_detector_grid(layout):
 
 
 def test_preview_detector_grid_uses_coordinate_time_not_gate_tick():
+    """Check that preset detectors group into rounds by coordinate time even when rounds share a gate TICK."""
     preview = engine.EditorLab().layout()
     for layout in [preview] + [entry["layout"] for entry in preview["examples"]]:
         assert_detector_grid(layout)
@@ -103,7 +106,7 @@ def test_preview_detector_grid_uses_coordinate_time_not_gate_tick():
     assert preview["kind"] == "memory"
     assert preview["mapping_verified"] is True
     assert preview["checks"] == engine.Lab().layout()["checks"]
-    # Stim's final ancilla/data readouts share a TICK but not detector time.
+    # Final ancilla and data readouts share a TICK but have distinct detector time coordinates.
     assert (
         preview["boundaries"][-1]["available_tick"]
         == preview["boundaries"][-2]["available_tick"]
@@ -112,6 +115,7 @@ def test_preview_detector_grid_uses_coordinate_time_not_gate_tick():
 
 
 def test_custom_detector_grid_uses_spatial_coordinates_or_detector_identity():
+    """Check that custom circuits group rows by spatial coordinates and fall back to detector IDs when omitted."""
     circuit = stim.Circuit("""
         R 0
         M 0
@@ -132,6 +136,7 @@ def test_custom_detector_grid_uses_spatial_coordinates_or_detector_identity():
 
 
 def test_physical_layout_keeps_typed_targets_without_inventing_qubits():
+    """Check that record lookbacks and MPP Pauli targets preserve their types without creating extra qubits."""
     circuit = stim.Circuit("R 0 2\nM 0\nCX rec[-1] 2\nMPP X0*Z2\nDETECTOR rec[-1]")
     layout = engine._layout(circuit, "Software")
     assert [q["id"] for q in layout["data"]] == [0, 2]
@@ -152,6 +157,7 @@ def test_physical_layout_keeps_typed_targets_without_inventing_qubits():
 
 @pytest.mark.parametrize("index", [0, 1])
 def test_run_reuses_preview_geometry_and_detector_grid(index):
+    """Check that running an encoded preset returns the same geometry and detector grid as its preview."""
     lab = engine.EditorLab()
     entry = lab.layout()["examples"][index]
     response = lab.circuit_run(
@@ -176,6 +182,7 @@ def test_run_reuses_preview_geometry_and_detector_grid(index):
 
 
 def test_memory_run_keeps_preview_grid_and_semantics():
+    """Check that running the default memory circuit preserves the preview layout kind and detector grid."""
     lab = engine.EditorLab()
     preview = lab.layout()
     result = lab.run(preview["run_defaults"])
@@ -185,6 +192,7 @@ def test_memory_run_keeps_preview_grid_and_semantics():
 
 
 def test_unknown_geometry_does_not_inherit_verified_surface_mapping():
+    """Ensure mapping_verified and check geometry are cleared when logical_circuit does not match the preset."""
     entry = examples()[0]
     layout = engine._layout(stim.Circuit(entry["circuit"]), "Software", "R 0")
     assert layout["mapping_verified"] is False

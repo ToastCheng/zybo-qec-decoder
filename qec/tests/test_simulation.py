@@ -1,3 +1,8 @@
+"""Tests for `qec.surface.simulation.CircuitExperiment`.
+
+Covers noise preparation, single-shot trace replay, diagram metadata, timeouts, and serial decoder lifecycle.
+"""
+
 import importlib
 from pathlib import Path
 
@@ -8,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_added_noise_preserves_base_and_zero_requires_explicit_reference():
+    """Noiseless circuits require an explicit reference, while added noise preserves existing error instructions."""
     lab = api().CircuitExperiment()
     text = "R 0\nH 0\nH 0\nTICK\nM 0\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(0) rec[-1]"
     cfg = settings(text)
@@ -35,12 +41,14 @@ def test_added_noise_preserves_base_and_zero_requires_explicit_reference():
 
 
 def test_fake_serial_orchestration_not_physical_hardware(monkeypatch):
+    """Serial mode validates before opening, logs wire transactions, and closes the device on success or error."""
     from types import SimpleNamespace
 
     module = api()
     events = []
 
     class Fake:
+        """Fake `GraphDecoder` that logs lifecycle calls and returns fixed decode results."""
         def __init__(self, port):
             events.append(("open", port))
             self.transactions = [{"opcode": 1, "tx": b"abc", "rx": b"def"}]
@@ -95,6 +103,7 @@ def test_fake_serial_orchestration_not_physical_hardware(monkeypatch):
 
 
 def test_compile_worker_timeout_is_reported(monkeypatch):
+    """Subprocess timeouts during circuit compilation surface as validation ValueErrors."""
     import subprocess
 
     module = api()
@@ -108,6 +117,7 @@ def test_compile_worker_timeout_is_reported(monkeypatch):
 
 
 def api():
+    """Import and return `qec.surface.simulation` after verifying the module exists."""
     assert importlib.util.find_spec("qec.surface.simulation"), (
         "runtime web entry point missing"
     )
@@ -115,10 +125,12 @@ def api():
 
 
 def settings(text):
+    """Return a seeded experiment config with no reference circuit or added noise."""
     return {"circuit": text, "reference": None, "seed": 123, "added_noise": 0.0}
 
 
 def test_arbitrary_circuit_real_single_shot_reproducible_trace():
+    """Single-shot circuit runs are deterministic, track per-tick detectors, and isolate state between circuits."""
     text = """R 0 1 2
 H 0
 TICK
@@ -147,6 +159,7 @@ OBSERVABLE_INCLUDE(1) rec[-1]
 
 @pytest.mark.parametrize("name", ["phase_bell", "two_repetition_echo"])
 def test_checked_in_examples_execute_real_stim_and_software(name):
+    """Checked-in Stim fixtures run in software with final trace detectors matching packed syndrome bits."""
     result = (
         api()
         .CircuitExperiment()
@@ -162,6 +175,7 @@ def test_checked_in_examples_execute_real_stim_and_software(name):
 
 
 def test_generic_gate_noise_and_feedback_rejected_before_insertion():
+    """Added gate noise keeps existing noise and ideal operations intact, while measurement feedback is rejected."""
     module = api()
     cfg = settings("R 0 1\nS 0\nSQRT_X 1\nCX 0 1\nSPP Z0*Z1\nX_ERROR(0.1) 0\nM 0 1")
     cfg["added_noise"] = 0.02
@@ -178,6 +192,7 @@ def test_generic_gate_noise_and_feedback_rejected_before_insertion():
 
 
 def test_diagram_metadata_uses_stim_targets_not_text_guessing():
+    """Diagram metadata preserves typed Stim targets for sparse qubit IDs, Pauli products, and measurement records."""
     result = (
         api()
         .CircuitExperiment()
@@ -201,6 +216,7 @@ def test_diagram_metadata_uses_stim_targets_not_text_guessing():
 
 
 def test_uint32_observable_from_real_simulation():
+    """Observable index 31 (bit 31, value 2**31) is preserved in both simulation truth and decoder prediction."""
     result = (
         api()
         .CircuitExperiment()

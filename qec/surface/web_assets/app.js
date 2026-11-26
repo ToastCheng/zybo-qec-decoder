@@ -1,41 +1,54 @@
-"use strict";
 /**
- * Replay position and requested fault injections, independent of the DOM and run
- * result.
+ * Frontend logic for the Zybo QEC surface-code web lab.
+ *
+ * File map:
+ * - State management: LabState, visibleDetectors
+ * - API validation and request builders: validateLayout, validateReplay,
+ *   runSettings, circuitSettings
+ * - Geometry and SVG renderers: physicalGrid, latticeGrid, stabilizerFaces,
+ *   productGroups, circuitDiagram, suppliedDiagram
+ * - Detector bit matrix and formatting: decoderMatrix, cycleSummary, maskBit
+ * - Browser runtime: replay controls, simulation requests, DOM rendering, and
+ *   event wiring (guarded behind `typeof document !== "undefined"` so the pure
+ *   helpers above can be imported directly in Node unit tests)
+ */
+"use strict";
+
+/**
+ * Tracks the replay tick and user-injected Pauli faults, independent of the
+ * DOM and any server run result.
  */
 class LabState {
   /**
-   * Set the last physical tick and optionally reserve one extra position for the
-   * host correction overlay.
+   * Initialize the replay range. Setting hostOverlay reserves one extra step
+   * after lastTick to display the host Pauli-frame correction.
    */
   constructor(lastTick = 21, hostOverlay = true) {
     this.lastTick = lastTick;
     this.endTick = lastTick + Number(hostOverlay);
     this.reset();
   }
-  /** Discard all requested faults and rewind to tick zero. */
+  // Clear all injected faults and rewind to tick 0.
   reset() {
     this.faults = [];
     this.tick = 0;
   }
-  /**
-   * Round the requested position and clamp it to the physical trace plus any
-   * overlay.
-   */
+  // Round tick and clamp it to [0, endTick].
   seek(tick) {
     this.tick = Math.max(0, Math.min(this.endTick, Math.round(tick)));
   }
-  /** Advance one replay position without passing the end. */
+  // Advance replay by one tick.
   next() {
     this.seek(this.tick + 1);
   }
-  /** Step back one replay position without going below zero. */
+  // Step replay back by one tick.
   previous() {
     this.seek(this.tick - 1);
   }
   /**
-   * Toggle one Pauli per qubit and tick: repeat it to remove it, or choose
-   * another to replace it. On the overlay, default to the last physical tick.
+   * Toggle a Pauli fault on (qubit, tick): repeating the same Pauli removes it,
+   * while picking a different Pauli replaces it. Defaults to the last physical
+   * tick if the replay is currently on the host-correction step.
    */
   toggle(qubit, pauli, tick = Math.min(this.tick, this.lastTick)) {
     const i = this.faults.findIndex(
@@ -48,17 +61,20 @@ class LabState {
     this.faults.push({ tick, qubit, pauli });
   }
 }
+
 /**
- * Filter fired detector IDs to readouts available at this tick; every ID must
- * exist in the layout.
+ * Return the subset of fired detector IDs whose measurement is available at or
+ * before tick. Assumes every ID in indices exists in detectors.
  */
 const visibleDetectors = (detectors, indices, tick) =>
   indices.filter(
     (i) => detectors.find((d) => d.id === i).available_tick <= tick,
   );
+
 /**
- * Return the layout unchanged if it has the arrays and detector timing required
- * by replay; otherwise throw a restart error.
+ * Check that a layout payload includes the tick, qubit, boundary, row, and
+ * detector timing fields needed for replay. Returns data unchanged, or throws
+ * a restart message when talking to an older server schema.
  */
 function validateLayout(data) {
   if (
@@ -78,9 +94,10 @@ function validateLayout(data) {
   }
   return data;
 }
+
 /**
- * Require a detector list and a Pauli frame for every physical tick. Return the
- * original result or throw a restart error.
+ * Check that a run response provides detector_indices and one pauli_frame
+ * object per physical tick. Returns data unchanged, or throws a restart error.
  */
 function validateReplay(data, tickCount) {
   if (
@@ -95,15 +112,18 @@ function validateReplay(data, tickCount) {
   }
   return data;
 }
+
 const noiseKeys = [
   "after_clifford_depolarization",
   "before_round_data_depolarization",
   "before_measure_flip_probability",
   "after_reset_flip_probability",
 ];
+
 /**
- * Build the distance-3, three-round Z-memory request. Check the four noise rates
- * and seed, and copy the noise and fault settings.
+ * Validate the four noise rates (each in [0, 0.75]) and nonnegative safe
+ * integer seed, then build a cloned request payload for the fixed distance-3,
+ * three-round rotated Z-memory circuit.
  */
 function runSettings(noise, seed, faults) {
   for (const key of noiseKeys) {
@@ -123,10 +143,11 @@ function runSettings(noise, seed, faults) {
     faults: faults.map((fault) => ({ ...fault })),
   };
 }
+
 /**
- * Build an annotated Stim request without rewriting the source. Use null for a
- * blank reference and omit absent faults or logical text. Throw on blank circuit
- * text or invalid seed or noise.
+ * Build a request payload for an annotated Stim circuit without modifying the
+ * source text. Converts blank references to null, omits empty faults or logical
+ * circuit text, and throws if the circuit, seed, or added noise is invalid.
  */
 function circuitSettings(
   circuit,
@@ -150,9 +171,11 @@ function circuitSettings(
     ...(logicalCircuit.trim() ? { logical_circuit: logicalCircuit } : {}),
   };
 }
+
 /**
- * Position every qubit using its 2D coordinates if they are complete, finite and
- * unique. Otherwise use a square-ish index grid in input order.
+ * Compute pixel coordinates for a list of qubits. Uses each qubit's 2D
+ * QUBIT_COORDS when all coordinates are finite and distinct; otherwise arranges
+ * qubits in a square-ish index grid in input order.
  */
 function physicalGrid(qubits) {
   const coordinates =
@@ -179,15 +202,17 @@ function physicalGrid(qubits) {
     height: Math.max(120, ...points.map((q) => q.y + 40)),
   };
 }
+
 /**
- * Tile connected extraction-support patches to fit the available width. Fall back
- * to the physical grid without checks or sufficient coordinate dimensions.
+ * Group qubits into connected surface-code patches based on check supports,
+ * then tile and scale those patches to fit availableWidth. Falls back to
+ * physicalGrid when checks or 2D coordinates are missing.
  */
 function latticeGrid(layout, availableWidth) {
   const qubits = [...layout.data, ...layout.checks];
   if (!layout.checks.length || !qubits.every((q) => q.coords?.length >= 2))
     return physicalGrid(qubits);
-  // Extraction-check supports define patches; interpatch logical gates do not.
+  // Build adjacency from check supports only so inter-patch logical gates do not merge separate patches.
   const neighbors = new Map(qubits.map((q) => [q.id, new Set()]));
   for (const check of layout.checks) {
     for (const id of check.support || []) {
@@ -238,9 +263,10 @@ function latticeGrid(layout, availableWidth) {
     label: "Surface-code patches · QUBIT_COORDS geometry",
   };
 }
+
 /**
- * Format reported decode cycles, preferring hardware metadata. Label multi-chunk
- * sums as core cycles excluding uploads.
+ * Format reported decode cycles for the run summary, preferring hardware
+ * metadata when present. Multi-chunk totals note that host uploads are excluded.
  */
 function cycleSummary(result) {
   const cycles = result.hardware?.cycles ?? result.cycles ?? "N/A (software)";
@@ -249,14 +275,17 @@ function cycleSummary(result) {
     ? `${cycles} (sum of ${count} core decodes; uploads excluded)`
     : String(cycles);
 }
+
 /**
- * Read bit index without signed 32-bit coercion, so bit 31 works for unsigned
- * decoder masks.
+ * Read bit index from an unsigned integer mask using division instead of
+ * bitwise shifts, avoiding JavaScript's signed 32-bit truncation on bit 31.
  */
 const maskBit = (mask, index) => Math.floor(mask / 2 ** index) % 2;
+
 /**
- * Group typed targets into pairs or combiner-delimited Pauli products. Preserve
- * record and sweep operands in pairs for classical feedback labels.
+ * Split an operation's typed targets into visual groups: pairs for two-qubit
+ * gates (keeping rec/sweep operands for classical feedback labels), or
+ * combiner-delimited Pauli products for MPP, SPP, and SPP_DAG.
  */
 function productGroups(op) {
   if (op.kind === "pair") {
@@ -281,10 +310,8 @@ function productGroups(op) {
   }
   return groups;
 }
-/**
- * Escape characters that have special meaning in SVG text or quoted attribute
- * values.
- */
+
+// Escape special XML/HTML characters for safe use in SVG text and attributes.
 const escapeMarkup = (value) =>
   String(value).replace(
     /[&<>"']/g,
@@ -293,9 +320,11 @@ const escapeMarkup = (value) =>
         c
       ],
   );
+
 /**
- * Build an SVG with one wire per qubit and one column per operation group.
- * Highlight selected physical ticks; callers pass -1 for static logical diagrams.
+ * Build an SVG circuit diagram with one wire per qubit and one column per gate
+ * or Pauli-product group. Highlights gates at the selected tick; pass -1 for
+ * static logical diagrams.
  */
 function circuitDiagram(qubits, ticks, selected, logical = false) {
   const row = new Map(qubits.map((q, i) => [q.id, 42 + i * 48]));
@@ -374,10 +403,11 @@ function circuitDiagram(qubits, ticks, selected, logical = false) {
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" role="img" aria-label="${logical ? "Logical" : "Input"} circuit">${body}</svg>`;
 }
+
 /**
- * Parse supplied logical text for display only. Return qubit IDs and typed
- * operations grouped by TICK; this does not validate the logical-to-physical
- * mapping.
+ * Parse user-supplied logical Stim text into qubit IDs and TICK-grouped
+ * operations for SVG rendering. Used for display only; does not validate that
+ * the logical circuit matches the physical one.
  */
 function suppliedDiagram(text) {
   const lines = text
@@ -386,10 +416,7 @@ function suppliedDiagram(text) {
     .filter(Boolean);
   let cursor = 0,
     count = 0;
-  /**
-   * Read successive lines from the shared cursor, expanding nested REPEAT blocks
-   * under the diagram size cap and rejecting unmatched braces.
-   */
+  // Recursively read lines and expand REPEAT blocks up to the 10,000-line display cap.
   function block(nested = false) {
     const out = [];
     while (cursor < lines.length) {
@@ -450,9 +477,11 @@ function suppliedDiagram(text) {
     ticks,
   };
 }
+
 /**
- * Draw basis-colored SVG polygons from check support coordinates. A two-site
- * boundary face uses the check ancilla as its third vertex.
+ * Build basis-colored SVG polygons from each check's support coordinates.
+ * Two-qubit boundary checks include the check ancilla as a third vertex so
+ * they render as triangles.
  */
 function stabilizerFaces(checks, points) {
   const byId = new Map(points.map((q) => [q.id, q]));
@@ -462,7 +491,7 @@ function stabilizerFaces(checks, points) {
         .map((id) => byId.get(id))
         .filter(Boolean);
       if (support.length < 2) return "";
-      // Boundary checks form triangles with their ancilla; bulk checks use four data sites.
+      // Boundary checks touch only two data qubits, so include the ancilla to make a triangle.
       const vertices =
         support.length === 2 ? [...support, byId.get(check.id)] : support;
       if (vertices.some((q) => !q)) return "";
@@ -476,10 +505,11 @@ function stabilizerFaces(checks, points) {
     })
     .join("");
 }
+
 /**
- * Render check rows by measurement boundary, keeping detectors blank until their
- * availability tick. In the host overlay, annotate fired bits with their residual
- * values where present.
+ * Render the check-by-round detector bit matrix as HTML. Detectors display "·"
+ * until tick reaches their available_tick; on the host-correction step, fired
+ * bits also show their residual value (for example "1→0").
  */
 function decoderMatrix(layout, result, tick, corrected = false) {
   const boundaries = layout.boundaries || [];
@@ -509,10 +539,7 @@ function decoderMatrix(layout, result, tick, corrected = false) {
       html +=
         '<div class="detector-cell">' +
         detectors
-          /**
-           * Render one detector, distinguishing an unread bit from zero and a
-           * fired bit from one cleared by the host frame.
-           */
+          // Format each detector bit: unread ("·"), measured (0/1), or host-corrected ("1→0").
           .map((d) => {
             const available = Boolean(result && d.available_tick <= tick);
             const bit = available
@@ -549,8 +576,9 @@ if (typeof module !== "undefined")
     validateReplay,
   };
 
+// Browser runtime: API requests, replay playback loop, DOM rendering, and event wiring.
 if (typeof document !== "undefined") {
-  /** Look up a control by its HTML id. */
+  // Shorthand for looking up an element by ID.
   const $ = (id) => document.getElementById(id);
   let layout,
     memoryLayout,
@@ -564,9 +592,10 @@ if (typeof document !== "undefined") {
     requestId = 0,
     timer = null,
     pauli = "X";
+
   /**
-   * Fetch JSON from the replay API: use GET without a body or POST with JSON.
-   * Report the server's error when available.
+   * Call a JSON API endpoint (GET when body is omitted, POST otherwise) and
+   * throw the server's error message on non-2xx responses.
    */
   async function api(path, body) {
     const response = await fetch(
@@ -583,7 +612,8 @@ if (typeof document !== "undefined") {
     if (!response.ok) throw Error(data.error || `HTTP ${response.status}`);
     return data;
   }
-  /** Cancel the replay timer and restore the Play button's accessible state. */
+
+  // Stop the playback timer and reset the Play button icon and ARIA state.
   function stop() {
     clearTimeout(timer);
     timer = null;
@@ -592,19 +622,15 @@ if (typeof document !== "undefined") {
     $("play").setAttribute("aria-pressed", "false");
     $("play").title = "Play";
   }
-  /**
-   * Seek locally, sync the fault tick to the physical position, and redraw
-   * without running the decoder.
-   */
+
+  // Move replay to tick locally, keep the fault-tick input in range, and redraw.
   function seek(tick) {
     state.seek(tick);
     $("fault-tick").value = Math.min(state.tick, state.lastTick);
     render();
   }
-  /**
-   * Replay one frame immediately and schedule the next using the speed control,
-   * or stop at the end.
-   */
+
+  // Step forward one tick and schedule the next frame from the speed selector, stopping at endTick.
   function advance() {
     state.next();
     render();
@@ -614,9 +640,10 @@ if (typeof document !== "undefined") {
     }
     timer = setTimeout(advance, 700 / Number($("speed").value));
   }
+
   /**
-   * Discard the completed trace and rewind after an edit. Bump the request ID so
-   * an outstanding reply cannot restore stale replay.
+   * Clear the current run result and rewind to tick 0 after an edit. Bumping
+   * requestId ensures any still-pending fetch is ignored when it finishes.
    */
   function invalidate() {
     stop();
@@ -628,16 +655,18 @@ if (typeof document !== "undefined") {
     state.seek(0);
     render();
   }
-  /** Look up the selected example in the loaded layout metadata, if present. */
+
+  // Return the metadata entry for the currently selected preset, if any.
   function selectedExample() {
     return memoryLayout?.examples?.find(
       (e) => e.id === $("circuit-template").value,
     );
   }
+
   /**
-   * Submit one explicit Run for the selected circuit. Validate the reply before
-   * enabling replay, ignore stale replies, and block overlapping requests until
-   * the outstanding fetch settles.
+   * Submit an explicit simulation and decode run for the active circuit.
+   * Blocks overlapping requests, validates the response schema before enabling
+   * replay, and discards stale replies if the user edited anything mid-flight.
    */
   async function simulate() {
     if (
@@ -713,17 +742,16 @@ if (typeof document !== "undefined") {
     }
   }
 
-  /**
-   * Compose two Pauli labels ignoring phase; the empty string denotes identity,
-   * and matching labels cancel.
-   */
+  // Multiply two Pauli labels ignoring phase; empty string is identity and identical labels cancel.
   const combine = (a, b) =>
     !a ? b || "" : !b ? a : a === b ? "" : "XYZ".replace(a, "").replace(b, "");
   let diagramKey = "";
+
   /**
-   * Draw supplied logical text or the physical input trace. Cache the SVG across
-   * seeks and update physical gate highlights separately; mark supplied mappings
-   * as unverified unless they match the verified layout.
+   * Render either the logical or physical circuit SVG into #circuit-diagram.
+   * Reuses the cached SVG across seeks and updates .active gate classes in
+   * place; marks custom logical circuits as unverified unless they match the
+   * verified preset text.
    */
   function renderDiagram(custom, tick) {
     const logicalText = custom
@@ -799,10 +827,11 @@ if (typeof document !== "undefined") {
           });
     }
   }
+
   /**
-   * Redraw the lattice, detector matrix, diagrams, and controls from local state.
-   * Render the optional host overlay separately from physical gates and sampled
-   * Pauli frames.
+   * Synchronize the full UI (lattice, detector matrix, circuit diagram, fault
+   * list, and replay controls) with local state and the active run result.
+   * Renders the host-correction step separately from physical ticks.
    */
   function render() {
     if (!layout) return;
@@ -880,10 +909,7 @@ if (typeof document !== "undefined") {
 
     const links = operations
       .filter((op) => op.name === "CX")
-      /**
-       * Draw one line per CX target pair, skipping targets without a plotted
-       * position.
-       */
+      // Draw a line for each plotted CX target pair.
       .flatMap((op) => {
         const links = [];
         for (let i = 0; i < op.targets.length; i += 2) {
@@ -931,10 +957,7 @@ if (typeof document !== "undefined") {
           (f) => f.qubit === q.id && f.tick === Number($("fault-tick").value),
         );
         button.setAttribute("aria-pressed", String(selected));
-        /**
-         * Validate the chosen injection tick, then toggle the fault and discard
-         * the stale run without submitting a new one.
-         */
+        // Validate the chosen fault tick, toggle the fault locally, and clear any stale run.
         button.onclick = () => {
           if (pending) return;
           const faultTick = Number($("fault-tick").value);
@@ -1011,10 +1034,8 @@ if (typeof document !== "undefined") {
     for (const key of noiseKeys) $(key).disabled = pending || selectedCustom;
     $("added-noise").disabled = pending || !selectedCustom;
   }
-  /**
-   * Bind the Pauli picker so changing basis updates the injection controls
-   * without editing existing faults.
-   */
+
+  // Switch the active Pauli basis for future fault clicks without changing existing faults.
   document.querySelectorAll("[data-pauli]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -1028,10 +1049,8 @@ if (typeof document !== "undefined") {
       }),
   );
   $("run").onclick = simulate;
-  /**
-   * Switch to the cached preset preview (or hide stale geometry for custom
-   * input), reset replay bounds, and clear the prior run without a request.
-   */
+
+  // Switch between built-in presets and custom input locally without running the decoder.
   $("circuit-template").onchange = () => {
     if (!state) return;
     const choice = $("circuit-template").value;
@@ -1054,15 +1073,12 @@ if (typeof document !== "undefined") {
     diagramKey = "";
     invalidate();
   };
+
+  // Invalidate any prior run when settings or circuit text change; editing circuit source detaches the preset.
   document
     .querySelectorAll(
       ".settings input, #circuit-editor input, #circuit-editor textarea",
     )
-    /**
-     * Bind settings and circuit text edits to local invalidation. Editing
-     * physical source detaches the preset preview and clears faults tied to its
-     * old layout.
-     */
     .forEach((control) => {
       control.oninput = () => {
         if (!state) return;
@@ -1077,32 +1093,28 @@ if (typeof document !== "undefined") {
       };
       control.onchange = control.oninput;
     });
-  /** Pause and step back one position in the completed trace. */
+
+  // Pause and step back one tick.
   $("back").onclick = () => {
     if (!result || pending) return;
     stop();
     seek(state.tick - 1);
   };
-  /** Pause and step forward one position in the completed trace. */
+  // Pause and step forward one tick.
   $("step").onclick = () => {
     if (!result || pending) return;
     stop();
     seek(state.tick + 1);
   };
-  /** Pause on scrub and redraw the selected position locally. */
+  // Pause and jump directly to the scrubbed tick.
   $("scrubber").oninput = () => {
     if (!result || pending) return;
     stop();
     seek(Number($("scrubber").value));
   };
-  /**
-   * Refresh injection labels for the chosen fault tick without moving replay.
-   */
+  // Refresh qubit ARIA labels when the fault-injection tick changes.
   $("fault-tick").oninput = () => render();
-  /**
-   * Toggle playback of a completed run; restart at tick zero when Play is pressed
-   * at the end.
-   */
+  // Toggle playback, restarting from tick 0 if already at the end.
   $("play").onclick = () => {
     if (!result || pending) return;
     if (timer) {
@@ -1117,17 +1129,15 @@ if (typeof document !== "undefined") {
     advance();
   };
 
-  /** Clear requested faults and invalidate the run once no run is pending. */
+  // Clear all injected faults and reset replay when idle.
   $("reset").onclick = () => {
     if (pending || !state) return;
     state.reset();
     $("fault-tick").value = 0;
     invalidate();
   };
-  /**
-   * Handle replay shortcuts outside form controls. Arrows pause and seek; Space
-   * invokes Play or Pause.
-   */
+
+  // Replay keyboard shortcuts outside form controls: Left/Right arrows seek, Space toggles Play/Pause.
   document.addEventListener("keydown", (e) => {
     if (
       e.ctrlKey ||
@@ -1148,20 +1158,16 @@ if (typeof document !== "undefined") {
       $("play").click();
     }
   });
+
   let latticeWidth = 0;
-  /**
-   * Reserve bottom scroll space equal to the measured height of the fixed control
-   * dock.
-   */
+  // Keep --dock-height synced with the fixed bottom dock so page content can scroll above it.
   new ResizeObserver(([entry]) => {
     document.documentElement.style.setProperty(
       "--dock-height",
       `${entry.target.getBoundingClientRect().height}px`,
     );
   }).observe($("control-dock"));
-  /**
-   * Reflow the lattice when its visible width changes by more than one pixel.
-   */
+  // Reflow the lattice when its container width changes by more than 1px.
   new ResizeObserver(([entry]) => {
     const width = entry.contentRect.width;
     if (width > 0 && Math.abs(width - latticeWidth) > 1) {
@@ -1169,11 +1175,9 @@ if (typeof document !== "undefined") {
       if (layout && state) render();
     }
   }).observe($("physical-scroll"));
+
+  // Load the initial memory layout and preset previews on startup without running a simulation.
   api("/api/layout")
-    /**
-     * Install the initial memory layout and bundled preset previews without
-     * submitting a simulation.
-     */
     .then((data) => {
       layout = memoryLayout = validateLayout(data);
       $("circuit-text").value = data.circuit || "";
@@ -1198,9 +1202,7 @@ if (typeof document !== "undefined") {
       $("fault-tick").max = state.lastTick;
       render();
     })
-    /**
-     * Show load or schema errors above the circuit instead of offering replay.
-     */
+    // Display startup or schema errors in the status banner.
     .catch((e) => {
       $("status").className = "failed";
       $("status").textContent = e.message;

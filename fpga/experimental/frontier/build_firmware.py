@@ -1,4 +1,4 @@
-"""Build the ARM firmware beside qec_soc.xsa selected by QEC_IMAGE_DIR."""
+"""Build the frontier ARM firmware ELF against qec_soc.xsa in QEC_IMAGE_DIR."""
 
 import os
 from pathlib import Path
@@ -7,6 +7,11 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def main():
+    """Create a fresh Vitis standalone workspace and build the frontier ARM ELF.
+
+    Reads qec_soc.xsa from QEC_IMAGE_DIR (default build/image), imports the
+    frontier C sources, configures QEC_PLATFORM_HEADER, and prints the ELF path.
+    """
     image = (ROOT / os.environ.get("QEC_IMAGE_DIR", "build/image")).resolve()
     workspace = image / "vitis_ws"
     xsa = image / "qec_soc.xsa"
@@ -22,7 +27,7 @@ def main():
     for name in ("main.c", "platform.h"):
         if not (source / name).is_file():
             raise RuntimeError(f"Decoder firmware missing: {source / name}")
-    # Require a fresh workspace so stale exports cannot count as a build.
+    # Refuse nonempty workspaces so stale exports cannot mask a fresh build.
     if workspace.exists() and (not workspace.is_dir() or any(workspace.iterdir())):
         raise RuntimeError(
             f"Refusing nonempty workspace: {workspace}; select a fresh image directory"
@@ -51,11 +56,11 @@ def main():
     )
     app.remove_files(files=["src/helloworld.c"])
     app.import_files(from_loc=str(source), dest_dir_in_cmp="src")
-    # Remove the template from Vitis' generated source list as well.
+    # Vitis leaves helloworld.c listed in UserConfig.cmake after remove_files().
     config = workspace / "qec_app/src/UserConfig.cmake"
     text = config.read_text()
     text = text.replace('"helloworld.c"\n', "")
-    # Keep quotes around the platform header through CMake and compiler parsing.
+    # Escape quotes so QEC_PLATFORM_HEADER reaches the C preprocessor as "platform.h".
     text += '\nadd_compile_definitions("QEC_PLATFORM_HEADER=\\"platform.h\\"")\n'
     config.write_text(text)
     app.build()

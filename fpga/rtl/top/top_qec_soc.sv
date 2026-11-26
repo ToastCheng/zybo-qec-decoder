@@ -1,4 +1,8 @@
 `timescale 1ns / 1ps
+// Zybo Z7-10 board top level.
+// Connects the generated Zynq-7000 PS block design (`system_wrapper`) to
+// `ps_bridge` over a 32-bit AXI GPIO mailbox on the shared 100 MHz fabric
+// clock, and wires four mailbox status bits directly to the board user LEDs.
 module top_qec_soc #(
     parameter integer MAX_DETECTORS = 128,
     parameter integer MAX_EDGES = 512,
@@ -27,7 +31,8 @@ module top_qec_soc #(
     inout wire FIXED_IO_ps_porb,
     inout wire FIXED_IO_ps_srstb
 );
-    // The PS wrapper supplies DDR, MIO and the shared GPIO/decoder clock.
+    // Zynq PS block design: provides DDR, MIO/UART1, the 100 MHz fabric clock,
+    // an active-low peripheral reset, and the dual-channel AXI GPIO mailbox.
     wire clk;
     wire resetn;
     wire [31:0] ctrl;
@@ -59,7 +64,7 @@ module top_qec_soc #(
         .FCLK_CLK0_0(clk),
         .peripheral_aresetn_0(resetn)
     );
-    // Invert the active-low peripheral reset for the decoder bridge.
+    // ps_bridge expects an active-high synchronous reset; invert peripheral_aresetn_0.
     ps_bridge #(
         .MAX_DETECTORS(MAX_DETECTORS),
         .MAX_EDGES(MAX_EDGES),
@@ -70,14 +75,18 @@ module top_qec_soc #(
         .ctrl(ctrl),
         .status(status)
     );
-    // User LEDs directly expose the last mailbox status, not logical success.
+    // Board user LEDs mirror live mailbox status bits (not logical decode success):
     //       +-------------+-------------+-------------+------------------+
     // LED   | 3 (D18)     | 2 (G14)     | 1 (M15)     | 0 (M14)          |
     //       +-------------+-------------+-------------+------------------+
     // bit   | status[31]  | status[30]  | status[29]  | status[0]        |
     // role  | ACK phase   | decode DONE | op ERROR    | READ_DATA bit 0  |
     //       +-------------+-------------+-------------+------------------+
-    // LED0 changes meaning with metadata INDEX; it is not prediction bit 0.
-    // DONE can be high on an errored decode. See docs/decoder-design.md.
+    // Notes:
+    // - LED3 toggles on every acknowledged mailbox command (matches ctrl[31]).
+    // - LED2 (DONE) is high whenever a decode has finished, including errored decodes.
+    // - LED1 (ERROR) reflects only the latest command ack (cleared by a valid metadata read).
+    // - LED0 shows bit 0 of the last metadata read (e.g. saved_error after reading index 14),
+    //   not prediction bit 0. See docs/decoder-design.md.
     assign led = {status[31:29], status[0]};
 endmodule

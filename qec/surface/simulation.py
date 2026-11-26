@@ -1,4 +1,11 @@
-"""Compile bounded Stim input and sample one annotated physical experiment."""
+"""Compile Stim circuits in a bounded subprocess and simulate single shots.
+
+This module sits between the web/engine layer and the low-level compiler and
+decoders. It validates shot settings, compiles arbitrary annotated Stim
+circuits inside a time-limited worker process, steps through one shot with
+``stim.FlipSimulator`` to capture per-tick Pauli frames, and decodes the
+resulting syndrome in software or on the FPGA.
+"""
 
 import argparse
 import json
@@ -16,6 +23,19 @@ from qec.surface.partition import decode_chunks, partition_graph
 
 
 def _prepare(settings):
+    """Validate shot settings and return ``(circuit_text, reference_text)``.
+
+    Expects ``circuit``, ``reference``, ``seed``, and ``added_noise`` in
+    ``settings`` (plus optional ``logical_circuit`` and ``faults``). Explicit
+    faults are validated here but not inserted into the circuit, so they do not
+    alter the compiled decoding graph.
+
+    When ``added_noise`` is zero, the original circuit and supplied reference
+    are returned as-is. When ``added_noise`` is positive, depolarizing noise of
+    rate ``p`` is appended after every unitary gate (``DEPOLARIZE2`` for
+    two-qubit gates, ``DEPOLARIZE1`` otherwise) and ``reference`` is returned
+    as ``None`` so the compiler builds the graph directly from the noisy text.
+    """
     if not isinstance(settings, dict) or set(settings) - {
         "logical_circuit",
         "faults",
@@ -56,7 +76,12 @@ def _prepare(settings):
 
 
 def _validate_faults(circuit, faults):
-    """Validate injections before opening serial or starting shot simulation."""
+    """Check explicit fault records before simulation or serial access.
+
+    Allows at most 64 entries, each specifying an integer tick in
+    ``0..circuit.num_ticks``, a qubit index used by a non-``MPAD`` instruction,
+    and a Pauli error (``"X"``, ``"Y"``, or ``"Z"``).
+    """
     if not isinstance(faults, list) or len(faults) > 64:
         raise ValueError("faults must be a list of at most 64 records")
     used = {
@@ -85,11 +110,18 @@ def _validate_faults(circuit, faults):
 
 
 def _mask(bits):
+    """Pack a sequence of 0/1 bits into an integer mask (bit ``i`` at ``1 << i``)."""
     return sum(int(bit) << i for i, bit in enumerate(bits))
 
 
 def _compile_bounded(settings, capacities=None):
-    """Run compilation in a serial-free worker with a 15-second deadline."""
+    """Compile a circuit in a child process with a hard 15-second timeout.
+
+    Stim's detector error model extraction runs in C++, so a Python thread
+    cannot reliably interrupt a slow or oversized input. Running compilation in
+    an isolated subprocess lets us enforce a wall-clock deadline and keeps
+    untrusted or invalid inputs away from any open serial connection.
+    """
     try:
         worker = subprocess.run(
             [sys.executable, "-m", "qec.surface.simulation", "--compile-worker"],
@@ -116,7 +148,12 @@ def _compile_bounded(settings, capacities=None):
 
 
 def _diagram_operation(op):
-    """Extract typed Stim targets without parsing display strings."""
+    """Serialize one Stim instruction into typed target records for the UI.
+
+    Inspects Stim's target flags directly (combiners, measurement records,
+    sweep bits, Pauli targets, and inverted results) so the frontend does not
+    have to parse raw Stim text to draw gates.
+    """
     targets = []
     for t in op.targets_copy():
         if t.is_combiner:
@@ -149,15 +186,32 @@ def _diagram_operation(op):
 
 
 class CircuitExperiment:
-    """Sample first, then upload the compiled graph for an explicit hardware run."""
+    """Compile, simulate, and decode one shot of an annotated Stim circuit."""
 
     def __init__(self, serial_port=None):
+        """Store an optional FPGA UART path; the port is only opened in ``run``."""
         self.serial_port = serial_port
 
     def validate(self, settings):
+        """Compile and validate ``settings`` in the bounded worker without serial I/O."""
         return _compile_bounded(settings)
 
     def run(self, settings):
+        """Compile one circuit, simulate a single shot, and decode its syndrome.
+
+        Steps through the flattened circuit one ``TICK`` segment at a time with
+        ``stim.FlipSimulator`` (``disable_stabilizer_randomization=True``).
+        Injecting explicit faults right before their target tick keeps them out
+        of the precompiled decoding graph while letting us record the live Pauli
+        frame, detector flips, and observable flips after every tick.
+
+        Returns a dict containing the compiled graph, per-tick ``trace``, packed
+        ``syndrome`` and ``observable_truth``, ``injected_circuit``, ``faults``,
+        and decoder output (``source``, ``prediction``, ``cycles``, and
+        ``transactions``). Uses the FPGA when ``serial_port`` is configured,
+        partitioning the graph into hardware-sized windows if needed; otherwise
+        falls back to the software decoder.
+        """
         compiled = self.validate(settings)
         circuit = stim.Circuit(compiled["circuit"])
         simulator = stim.FlipSimulator(
@@ -172,6 +226,9 @@ class CircuitExperiment:
                 segments.append(stim.Circuit())
             else:
                 segments[-1].append(op)
+        # Replay each tick segment in order, injecting manual faults right
+        # before their tick. peek_pauli_flips() formats with a leading sign
+        # character ('+'/'-'), so [1:] leaves one Pauli symbol per qubit.
         trace = []
         injected = stim.Circuit()
         for tick, segment in enumerate(segments):
@@ -253,6 +310,13 @@ class CircuitExperiment:
 
 
 def main():
+    """CLI entry point for the ``--compile-worker`` subprocess.
+
+    Reads a JSON request from stdin, prepares the physical circuit, checks that
+    any optional ``logical_circuit`` display text contains only noiseless
+    Clifford instructions (no noise channels or detector/observable markers),
+    and writes either the compiled graph dict or ``{"error": ...}`` to stdout.
+    """
     parser = argparse.ArgumentParser(description="Bounded compiler worker")
     parser.add_argument("--compile-worker", action="store_true", required=True)
     parser.parse_args()
@@ -281,7 +345,7 @@ def main():
         limits = Capacities(**request["capacities"]) if request["capacities"] else None
         output = compile_circuit(text, reference, limits)
         output.update(logical_circuit=logical_text, logical_mapping_verified=False)
-    # The worker returns every compiler failure through its JSON error envelope.
+    # Return all compilation errors through the JSON envelope instead of stderr.
     except Exception as exc:  # noqa: BLE001
         output = {"error": str(exc)}
     print(json.dumps(output))

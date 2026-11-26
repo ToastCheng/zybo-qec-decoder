@@ -1,27 +1,41 @@
-# Experimental programmable d3/d5 exact matching frontier image
+# Experimental programmable exact matching (d=3 and d=5)
 
-`fpga/experimental/frontier/` implements a runtime-program-loadable exact
-minimum-weight T-join parity-frontier decoder in Zybo Z7-10 PL. It supports
-frontier width up to 12 (up to 4,096 live parity states across four parallel
-BRAM lanes), up to 128 detectors, up to 512 DP operations (1,024 two-record
-mailbox uploads), 64-bit unsigned exact integer costs with explicit infinity
-saturation, and one logical observable bit.
+This folder implements an experimental Zybo Z7-10 FPGA decoder that solves
+**exact weighted minimum-weight matching** (minimum-weight T-join) in
+programmable logic using parity-frontier dynamic programming (DP). Unlike the
+fixed `d=3` prototype in `fpga/experimental/matching/`, you can upload new
+DP schedules at runtime without rebuilding the bitstream — including both
+`d=3` and `d=5` rotated surface-code memory graphs.
 
-This image is intentionally incompatible with the maintained runtime-UF host:
+## Hardware capacities and design
 
-- Metadata word 0 is `0xd505` (not UF's `2`), so `GraphDecoder` and the public
-  UF web server fail closed.
-- Configuration opcodes load a parity-DP program (two indexed 10-byte records
-  per operation), not UF `(endpoint_a, endpoint_b, observable_mask)` edges.
-- PL computes an IEEE CRC32 over every accepted 10-byte configuration record
-  and exposes it in metadata words 15..16; `capture_curves.py` requires exact
-  CRC readback before and after decoding each circuit/noise point.
-- A separate PL cycle counter runs independently of the datapath FSM and raises
-  `decode_error` on any discrepancy.
+- **Frontier states:** width up to 12 (up to `2^12 = 4,096` live parity
+  states) stored across four parallel BRAM lanes
+- **Detectors and program size:** up to 128 detectors and 512 DP operations
+  (uploaded as 1,024 indexed 10-byte records)
+- **Weights and output:** exact 64-bit unsigned integer costs with explicit
+  infinity saturation, and 1 logical observable bit
+- **Independent cycle guard:** a second PL cycle counter runs alongside the
+  datapath FSM and raises `decode_error` if the two counts ever disagree
 
-## Build and verification
+## Separate protocol (incompatible with runtime UF)
 
-From an isolated build directory:
+This image uses its own protocol so ordinary union-find tools cannot
+accidentally talk to it:
+
+- Metadata word 0 reports protocol version `0xd505` (instead of UF's `2`), so
+  `GraphDecoder` and `qec.surface.web` fail closed.
+- Configuration commands upload parity-DP program records (two 10-byte
+  records per operation) rather than UF `(endpoint_a, endpoint_b, mask)`
+  edges.
+- PL computes an IEEE CRC-32 over every accepted 10-byte program record and
+  exposes the digest in metadata words 15 and 16. `capture_curves.py` checks
+  that hardware digest before and after decoding each noise point.
+
+## Building the image and firmware
+
+Run from a fresh build directory so you do not overwrite the default runtime
+UF image:
 
 ```sh
 vivado -mode batch -source fpga/experimental/frontier/build.tcl \
@@ -30,9 +44,10 @@ QEC_IMAGE_DIR=build/fpga-four-curves/image-v2 \
   vitis -s fpga/experimental/frontier/build_firmware.py
 ```
 
-Default `make build` / `make firmware` / `make load` remain the maintained
-runtime UF image. Restore the maintained UF image before starting
-`qec.surface.web`.
+The root `Makefile` (`make build`, `make firmware`, `make load`) always
+targets the default runtime UF image. Reload the runtime UF image before
+launching `qec.surface.web`.
 
-Archived four-curve Zybo board evidence lives in the research repository under
+Raw four-curve Zybo board captures, DP schedules, and route reports are
+archived in the research repository under
 `fpga-qec/fpga-four-curve-benchmark/`.

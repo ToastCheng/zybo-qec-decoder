@@ -1,5 +1,8 @@
 `timescale 1ns / 1ps
-// GPIO and decoder share a clock; only one command may be outstanding.
+// AXI GPIO mailbox bridge for the programmable parity-frontier decoder.
+// Identifies the bitstream as protocol version 0xd505 and exposes 17 metadata
+// words (including the 32-bit hardware CRC-32 of the uploaded program).
+// PS GPIO and PL decoder share a clock; only one command may be in flight.
 module ps_bridge #(
     parameter integer MAX_DETECTORS = 128,
     parameter integer MAX_EDGES = 512,
@@ -98,14 +101,18 @@ module ps_bridge #(
     );
 
     // Metadata words returned in status.READ_DATA (16 bits each):
-    //  index   0       1        2      3       4        5      6
-    //       +-------+--------+------+-------+--------+------+--------+
-    //       | ver=2 | max D  |max E | max O | used D |used E| used O |
-    //       +-------+--------+------+-------+--------+------+--------+
+    //  index   0          1        2      3       4        5      6
+    //       +----------+--------+------+-------+--------+------+--------+
+    //       |ver=0xd505| max D  |max E | max O | used D |used E| used O |
+    //       +----------+--------+------+-------+--------+------+--------+
     //  index   7       8       9      10      11      12      13     14
     //       +-------+-------+-------+-------+-------+-------+-------+-------+
     //       | valid |gen LO |gen HI |pred LO|pred HI|cyc LO |cyc HI | error |
     //       +-------+-------+-------+-------+-------+-------+-------+-------+
+    //  index   15      16
+    //       +-------+-------+
+    //       |crc LO |crc HI |
+    //       +-------+-------+
     // valid/error: bit 0 carries the flag; bits 15:1 are zero.
     // Each HI/LO pair reconstructs {HI[15:0], LO[15:0]}; other indices error.
     always_comb begin
@@ -116,8 +123,7 @@ module ps_bridge #(
         end
         metadata_valid = 1;
         metadata = 0;
-        // Metadata words: version, capacities, counts, valid, generation,
-        // prediction, cycles and error. Split 32-bit fields low word first.
+        // Select the requested 16-bit metadata word (32-bit fields low word first).
         case (ctrl[23:16])
             0: metadata = 16'hd505;
             1: metadata = 16'(MAX_DETECTORS);
@@ -140,6 +146,10 @@ module ps_bridge #(
         endcase
     end
 
+    // Mailbox FSM: toggles ACK on status[31] once each command finishes.
+    // Staging (1), syndrome (5), and metadata (7) complete immediately in IDLE;
+    // config ops (2-4) wait for core cfg_ack (10 cycles on valid writes due to
+    // CRC); decode (6) waits for out_valid; abort (8) pulses shot_abort.
     always_ff @(posedge clk) begin
         if (rst) begin
             state <= IDLE;
@@ -161,7 +171,8 @@ module ps_bridge #(
                     if (ctrl[31] != status[31]) begin
                         request_bit <= ctrl[31];
                         request_opcode <= ctrl[27:24];
-                        // Acknowledge core commands only after their completion signal.
+                        // Core-backed opcodes (2, 3, 4, 6, 8) require INDEX == 0
+                        // and stay unacknowledged until the core finishes them.
                         if ((ctrl[27:24] == 2 || ctrl[27:24] == 3
                             || ctrl[27:24] == 4 || ctrl[27:24] == 6
                             || ctrl[27:24] == 8) && ctrl[23:16] != 0) begin

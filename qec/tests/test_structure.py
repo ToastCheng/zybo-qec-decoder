@@ -1,4 +1,4 @@
-"""Check the maintained project layout."""
+"""Repository layout tests guarding directory organization, naming rules, and documentation links."""
 
 import ast
 from pathlib import Path
@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_fpga_sources_are_in_one_tree():
+    """RTL, constraints, Vitis firmware, and the Tcl build script all live under `fpga/`."""
     for name in ("rtl", "constraints", "vitis"):
         assert not (ROOT / name).exists(), name
         assert (ROOT / "fpga" / name).is_dir(), name
@@ -15,6 +16,7 @@ def test_fpga_sources_are_in_one_tree():
 
 
 def test_current_sources_have_no_runtime_prefix():
+    """Maintained source trees contain no retired `runtime_` or `test_runtime` filenames."""
     paths = []
     for directory in ["qec/surface", "qec/tests", "fpga", "scripts"]:
         for path in (ROOT / directory).rglob("*"):
@@ -28,6 +30,7 @@ def test_current_sources_have_no_runtime_prefix():
 
 
 def test_web_is_the_only_http_interface():
+    """Only `qec/surface/web.py` defines HTTP server classes, and the old runtime assets folder is absent."""
     web = ROOT / "qec/surface/web.py"
     assert web.is_file()
     others = []
@@ -49,6 +52,7 @@ def test_web_is_the_only_http_interface():
 
 
 def test_readme_links_to_the_separate_quickstart():
+    """README.md links to `docs/quickstart.md`, includes a diagram, and has no legacy quickstart left over."""
     text = (ROOT / "README.md").read_text()
     assert "docs/quickstart.md" in text
     assert (ROOT / "docs/quickstart.md").is_file()

@@ -1,3 +1,5 @@
+"""End-to-end PTY serial tests for EditorLab memory and custom-circuit runs."""
+
 import struct
 from pathlib import Path
 
@@ -10,7 +12,9 @@ from qec.tests.test_host import MailboxTestDevice, pty_device
 
 
 class OracleDevice(MailboxTestDevice):
+    """Mailbox test device that answers decode requests using the Python reference decoder."""
     def __call__(self, frame):
+        """Decode syndrome frames in software and delegate all other opcodes."""
         if frame[2] == 5:
             syndrome = int.from_bytes(frame[5:-4], "little")
             result = decode(self.meta[4], self.edges, syndrome)
@@ -24,6 +28,7 @@ class OracleDevice(MailboxTestDevice):
 
 
 def test_memory_uploads_actual_graph_on_every_run_and_changes_dimensions():
+    """Check that layout() avoids serial I/O and each memory run uploads its current graph over PTY."""
     device = OracleDevice()
     with pty_device(device) as (port, requests):
         lab = EditorLab(port)
@@ -50,6 +55,7 @@ def test_memory_uploads_actual_graph_on_every_run_and_changes_dimensions():
     "name,qubits", [("phase_bell", 2), ("two_repetition_echo", 6), ("bit31", 1)]
 )
 def test_general_editor_uses_real_serial_graph_transactions(name, qubits):
+    """Check custom-circuit graph uploads and decode replies over PTY, including unsigned observable bit 31."""
     text = (
         "R 0\nX_ERROR(1) 0\nM 0\nDETECTOR rec[-1]\nOBSERVABLE_INCLUDE(31) rec[-1]"
         if name == "bit31"

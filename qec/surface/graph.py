@@ -1,8 +1,29 @@
-"""Check DEM components before converting them to graph edges."""
+"""Validate a Stim detector error model and project it to an unweighted graph.
+
+Called by ``qec.surface.circuit.compile_circuit`` right after Stim builds a
+detector error model (DEM). This module checks that every fault component is
+graphlike and unambiguous before producing the edge list and PyMatching graph
+used downstream by the software decoder, window partitioner, and FPGA host.
+"""
 
 
 def checked_graph(dem, detectors, observables):
-    """Reject hyperedges, detectorless logical faults and conflicting endpoint masks."""
+    """Convert a Stim DEM into sorted unweighted edges and a PyMatching graph.
+
+    Returns ``(edges, matching)``, where ``edges`` is a sorted list of
+    ``(a, b, mask)`` tuples with ``0 <= a < b <= detectors``. A component that
+    triggers only one detector connects to the reserved boundary vertex
+    ``detectors``, and bit ``i`` of ``mask`` is set when the edge flips Stim
+    logical observable ``L_i``. Passing ``observables`` ensures ``matching``
+    keeps the full logical observable width even if no edge carries a flip.
+
+    Every separator-delimited component in the flattened DEM is checked before
+    projection so PyMatching cannot silently drop or merge faults. Raises
+    ``ValueError`` for out-of-range detector or observable indices, hyperedges
+    (more than two detectors), detectorless logical errors, conflicting
+    observable masks on the same endpoint pair, or any mismatch between the DEM
+    signatures and the edges PyMatching produces.
+    """
     import pymatching
     import stim
 
@@ -11,7 +32,7 @@ def checked_graph(dem, detectors, observables):
         if instruction.type != "error":
             continue
         ds, mask = set(), 0
-        # A trailing separator applies the same checks to the final component.
+        # Append a separator so the final component runs through the same checks.
         for target in instruction.targets_copy() + [stim.target_separator()]:
             if target.is_separator():
                 if not ds and mask:
