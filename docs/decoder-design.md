@@ -92,7 +92,7 @@ produces 24 detectors and 78 edges split into two disconnected components
   because Z errors commute with `Z_L`, every edge in this component has
   `mask = 0`.
 
-## Decoding algorithm: grow clusters, then peel a forest
+## Decoding algorithm
 
 The core runs ordered, unweighted half-edge union-find growth followed by
 forest peeling. The Python reference is [`decode`](../qec/surface/decoder.py),
