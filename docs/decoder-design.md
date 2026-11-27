@@ -65,6 +65,27 @@ logical flips, and conflicting observable masks on the same endpoints.
 Zero-probability errors are ignored, so a noiseless circuit produces an empty
 graph unless you pass an explicit compatible noisy reference circuit.
 
+### Example: distance-3 rotated surface code
+
+![Distance-3 rotated surface code decoding graph for 3-round Z memory](images/d3-decoding-graph.png)
+
+Compiling Stim's 3-round distance-3 rotated Z-memory circuit
+(`surface_code:rotated_memory_z` with `after_clifford_depolarization = 0.001`)
+produces 24 detectors and 78 edges split into two disconnected components
+(ignoring the shared boundary vertex `B = 24`):
+
+- **Z-detector component (16 detectors, 55 edges, shown above):** tracks X
+  errors across four time slices (`t = 0..3`). Within each slice, internal
+  edges cross the middle row of data qubits (`mask = 0`), while data qubits on
+  the top and bottom boundaries touch only one Z check and therefore connect to
+  `B`. Crossing the top row flips the logical observable `Z_L` (`mask = 1`);
+  crossing the bottom row does not (`mask = 0`). Stacking rounds adds vertical
+  time edges (measurement errors) and diagonal space-time edges (gate errors
+  during syndrome extraction).
+- **X-detector component (8 detectors at `t = 1, 2`, 23 edges, not shown in
+  panel B):** tracks Z errors. Because Z errors commute with `Z_L`, every edge
+  in this component has `mask = 0`.
+
 ## Decoding algorithm: grow clusters, then peel a forest
 
 The core runs ordered, unweighted half-edge union-find growth followed by
