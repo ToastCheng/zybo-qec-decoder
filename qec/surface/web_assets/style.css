@@ -70,6 +70,22 @@ h1 span {
   font-weight: 400;
   color: var(--muted);
 }
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+  text-decoration: none;
+  font: 12px var(--mono);
+  white-space: nowrap;
+}
+.nav-link:hover {
+  border-color: var(--ink);
+}
 
 main {
   max-width: 1240px;

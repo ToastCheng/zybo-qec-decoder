@@ -150,3 +150,42 @@ def test_layout_and_invalid_runs_never_open_serial():
         assert request(port, "POST", "/api/run", "{}")[0] == 400
         cfg = {"circuit": "BAD 0", "reference": None, "seed": 1, "added_noise": 0}
         assert request(port, "POST", "/api/circuit-run", json.dumps(cfg))[0] == 400
+
+
+def test_example_route_serves_assets_and_matches_python_decoder():
+    """The /example route serves static walkthrough assets and matches qec.surface.decoder bit-for-bit."""
+    import subprocess
+
+    from qec.surface.decoder import decode
+
+    origin = "https://qec.toastcheng.com"
+    with server("/no/such/serial/device", public_origin=origin) as port:
+        for path in ["/example", "/example/", "/example.js", "/example.css"]:
+            assert request(port, "GET", path)[0] == 200
+            assert request(port, "GET", path, Host="qec.toastcheng.com")[0] == 200
+            assert request(port, "GET", path, Host="evil.test")[0] == 403
+
+    script = (
+        "const ex = require('./qec/surface/web_assets/example.js');"
+        "const out = [];"
+        "for (let s = 0; s < 16; s++) {"
+        "  const t = ex.buildTrace(s);"
+        "  const f = t[t.length - 1];"
+        "  out.push({s, prediction: f.prediction, correction_edges: f.selected, error: f.error});"
+        "}"
+        "console.log(JSON.stringify({edges: ex.EDGES.map(e => [e.a, e.b, e.mask]), results: out}));"
+    )
+    proc = subprocess.run(
+        ["node", "-e", script],
+        cwd=Path(__file__).parents[2],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(proc.stdout)
+    edges = [tuple(e) for e in payload["edges"]]
+    for row in payload["results"]:
+        ref = decode(4, edges, row["s"])
+        assert row["prediction"] == ref["prediction"]
+        assert row["correction_edges"] == ref["correction_edges"]
+        assert row["error"] == ref["error"]

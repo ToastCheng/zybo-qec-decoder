@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QEC / UF + Peeling</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/example.css" />
+    <script defer src="/example.js"></script>
+  </head>
+  <body class="uf-page">
+    <header>
+      <h1>QEC <span>/ UF + Peeling</span></h1>
+      <nav aria-label="Views">
+        <a class="nav-link" href="/">← Replay</a>
+      </nav>
+    </header>
+
+    <main class="uf-main">
+      <section class="uf-presets" aria-label="Presets">
+        <div class="preset-row" id="preset-buttons"></div>
+        <div class="preset-meta">
+          <p class="uf-hint">
+            Single spatial slice of d=3 rotated Z memory (4 Z detectors, 7 edges,
+            boundary B = 4). Click any data qubit to toggle an X error, or click
+            D0–D3 directly to flip a detector.
+          </p>
+          <button id="uf-clear" type="button">Clear faults</button>
+        </div>
+      </section>
+
+      <div class="uf-workspace">
+        <section class="uf-canvas-panel" aria-label="Decoding graph">
+          <div class="section-head">
+            <h2>Decoding graph &amp; 3×3 patch</h2>
+            <span id="uf-syndrome-tag">syndrome 0010</span>
+          </div>
+          <div class="uf-svg-wrap">
+            <svg
+              id="uf-graph"
+              viewBox="0 0 640 520"
+              role="img"
+              aria-label="Distance-3 Z-memory decoding graph"
+            ></svg>
+          </div>
+          <div class="uf-legend" aria-label="Graph legend">
+            <span class="leg-item"
+              ><i class="leg-swatch leg-idle"></i>Idle (0/2)</span
+            >
+            <span class="leg-item"
+              ><i class="leg-swatch leg-grow"></i>Half-edge (1/2)</span
+            >
+            <span class="leg-item"
+              ><i class="leg-swatch leg-forest"></i>Forest edge (2/2)</span
+            >
+            <span class="leg-item"
+              ><i class="leg-swatch leg-selected"></i>Selected correction</span
+            >
+            <span class="leg-item"
+              ><i class="leg-swatch leg-discarded"></i>Discarded leaf edge</span
+            >
+            <span class="leg-item"
+              ><i class="leg-swatch leg-leaf"></i>Active leaf / edge</span
+            >
+          </div>
+        </section>
+
+        <section class="uf-inspector" aria-label="Algorithm state">
+          <div class="section-head">
+            <div class="phase-wrap">
+              <span id="uf-phase-badge" class="phase-badge">Init</span>
+              <h2 id="uf-step-title">Initial state</h2>
+            </div>
+            <span id="uf-step-counter">Step 0 / 0</span>
+          </div>
+
+          <p id="uf-narrative" class="uf-narrative" aria-live="polite"></p>
+
+          <div class="uf-summary-grid">
+            <div class="summary-card">
+              <span class="summary-label">Forest edges</span>
+              <strong id="uf-forest-list" class="summary-value">none</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Selected edges</span>
+              <strong id="uf-selected-list" class="summary-value">none</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">Prediction (L0)</span>
+              <strong id="uf-prediction" class="summary-value">0</strong>
+            </div>
+            <div class="summary-card">
+              <span class="summary-label">True Z_L</span>
+              <strong id="uf-truth" class="summary-value">0</strong>
+            </div>
+          </div>
+
+          <div class="uf-tables">
+            <div class="state-block">
+              <h3>Vertices</h3>
+              <table class="state-table" aria-label="Detector vertex states">
+                <thead>
+                  <tr>
+                    <th>Vertex</th>
+                    <th>Bit</th>
+                    <th>Cluster</th>
+                    <th id="uf-vertex-col4">Parity</th>
+                  </tr>
+                </thead>
+                <tbody id="uf-vertex-rows"></tbody>
+              </table>
+            </div>
+
+            <div class="state-block">
+              <h3>Edges (uploaded order)</h3>
+              <table class="state-table" aria-label="Graph edge states">
+                <thead>
+                  <tr>
+                    <th>Edge</th>
+                    <th>Ends</th>
+                    <th>Mask</th>
+                    <th>Growth</th>
+                    <th>State</th>
+                  </tr>
+                </thead>
+                <tbody id="uf-edge-rows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="uf-dock" class="uf-dock" role="region" aria-label="Playback controls">
+      <div class="uf-dock-inner">
+        <div class="uf-transport">
+          <button id="uf-first" type="button" aria-label="First step">⏮</button>
+          <button id="uf-prev" type="button" aria-label="Previous step">◀</button>
+          <button id="uf-play" type="button" aria-label="Play">▶</button>
+          <button id="uf-next" type="button" aria-label="Next step">▶|</button>
+          <button id="uf-last" type="button" aria-label="Last step">⏭</button>
+        </div>
+        <div class="uf-scrubber-wrap">
+          <input
+            id="uf-scrubber"
+            type="range"
+            min="0"
+            max="0"
+            value="0"
+            aria-label="Algorithm step"
+          />
+          <span id="uf-dock-pos" class="uf-dock-pos">0 / 0</span>
+        </div>
+        <label class="uf-speed-label"
+          >Speed
+          <select id="uf-speed">
+            <option value="1400">0.5×</option>
+            <option value="850" selected>1×</option>
+            <option value="400">2×</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </body>
+</html>

@@ -111,6 +111,10 @@ def make_server(port=8765, serial_port=None, public_origin=None):
                 "/": ("index.html", "text/html"),
                 "/app.js": ("app.js", "text/javascript"),
                 "/style.css": ("style.css", "text/css"),
+                "/example": ("example.html", "text/html"),
+                "/example/": ("example.html", "text/html"),
+                "/example.js": ("example.js", "text/javascript"),
+                "/example.css": ("example.css", "text/css"),
             }
             if self.path not in files:
                 self.reply(404, {"error": "Not found"})
