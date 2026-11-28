@@ -34,7 +34,7 @@ module ps_bridge #(
         LAUNCH, WAIT_RESULT, ABORT_SHOT, ABORT_ACK
     } state_t;
     state_t state;
-    // GPIO mailbox word layouts (field widths are not drawn to scale).
+    // GPIO mailbox word layouts.
     //
     // ctrl (ARM -> PL): hold every bit stable until status.ACK matches ctrl.REQ.
     //  31    30:28     27:24      23:16             15:0
@@ -43,7 +43,7 @@ module ps_bridge #(
     // +-----+---------+----------+-----------------+------------------+
     //    1       3         4              8                  16 bits
     //
-    // status (PL -> ARM): DONE is latched decode completion, not logical success.
+    // status (PL -> ARM)
     //  31    30     29      28:16                   15:0
     // +-----+------+-------+-----------------------+------------------+
     // | ACK | DONE | ERROR | zero                  | READ_DATA        |
