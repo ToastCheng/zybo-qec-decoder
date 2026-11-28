@@ -1,23 +1,7 @@
 `timescale 1ns / 1ps
 // AXI GPIO toggle-mailbox bridge between the ARM PS and qec_decoder.
-//
-// How the handshake works
-// -----------------------
-// The AXI GPIO block and qec_decoder share the same 100 MHz fabric clock, and
-// only one command may be in flight at a time. To send a command, ARM writes
-// OPCODE, INDEX, DATA, and flips ctrl[31] (REQ) to the opposite of status[31]
-// (ACK), holding ctrl steady until status[31] flips to match ctrl[31].
-//
-// Status flags
-// ------------
-// - DONE  (status[30]): latched flag showing the last decode finished and its
-//   result words (metadata 10..14) are populated. DONE means completed, not
-//   succeeded: a decode error still drives DONE=1 alongside ERROR=1. DONE
-//   clears on a new decode launch, a new graph load (begin), or shot abort.
-// - ERROR (status[29]): describes only the current command acknowledgement
-//   (bad opcode/index, rejected graph write, decode error on op 6, or invalid
-//   metadata index on op 7). A later valid metadata read clears ERROR on the
-//   status bus without clearing saved_error (metadata index 14).
+// Both sides share one 100 MHz fabric clock; only one command may be in flight
+// at a time.
 module ps_bridge #(
     parameter integer MAX_DETECTORS = 128,
     parameter integer MAX_EDGES = 512,
@@ -36,12 +20,22 @@ module ps_bridge #(
     state_t state;
     // GPIO mailbox word layouts.
     //
-    // ctrl (ARM -> PL): hold every bit stable until status.ACK matches ctrl.REQ.
+    // ctrl (ARM -> PL)
     //  31    30:28     27:24      23:16             15:0
     // +-----+---------+----------+-----------------+------------------+
     // | REQ | ignored | OPCODE   | INDEX           | DATA             |
     // +-----+---------+----------+-----------------+------------------+
     //    1       3         4              8                  16 bits
+    //   REQ     [31]    : request toggle bit; flip to != status.ACK after setting
+    //                     the other fields to issue a command, and hold ctrl
+    //                     steady until status.ACK matches.
+    //   ignored [30:28] : unused by PL (software writes 0).
+    //   OPCODE  [27:24] : command selector (1..8 below; other values set ERROR).
+    //   INDEX   [23:16] : target index for op 1 (staging 0..7), op 5 (syndrome
+    //                     word 0..WORDS-1), or op 7 (metadata 0..14). Must be 0
+    //                     for ops 2, 3, 4, 6, and 8 (nonzero sets ERROR).
+    //   DATA    [15:0]  : 16-bit write payload for op 1 (staging) or op 5
+    //                     (syndrome slice). Ignored by all other opcodes.
     //
     // status (PL -> ARM)
     //  31    30     29      28:16                   15:0
@@ -49,8 +43,23 @@ module ps_bridge #(
     // | ACK | DONE | ERROR | zero                  | READ_DATA        |
     // +-----+------+-------+-----------------------+------------------+
     //    1      1      1              13                     16 bits
+    //   ACK       [31]    : acknowledge toggle bit; flips to match ctrl.REQ once
+    //                       the command completes (on success or error). Resets
+    //                       to 0.
+    //   DONE      [30]    : latched decode-complete flag (1 once a decode finishes
+    //                       and metadata 10..14 hold its result, even when
+    //                       ERROR=1). Cleared by reset, op 2 (graph begin), or
+    //                       op 8 (shot abort).
+    //   ERROR     [29]    : error flag for the latest acknowledged command only
+    //                       (bad opcode/index, rejected graph/syndrome write,
+    //                       decode error on op 6, or invalid metadata index on
+    //                       op 7). Cleared by the next succeeding command without
+    //                       clearing saved_error (metadata 14).
+    //   zero      [28:16] : reserved, always driven 0 by PL.
+    //   READ_DATA [15:0]  : metadata register value for a valid op 7; 0 for all
+    //                       other commands and invalid metadata reads.
     //
-    // Opcodes (INDEX must be 0 for opcodes 2, 3, 4, 6, and 8):
+    // Opcodes:
     //   1 = write staging register (INDEX 0..7)
     //   2 = begin graph load using staging[0..2]
     //   3 = append edge using staging[3..7]
