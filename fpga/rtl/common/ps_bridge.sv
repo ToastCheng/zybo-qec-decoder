@@ -1,7 +1,81 @@
 `timescale 1ns / 1ps
 // AXI GPIO toggle-mailbox bridge between the ARM PS and qec_decoder.
-// Both sides share one 100 MHz fabric clock; only one command may be in flight
-// at a time.
+//
+// Wraps qec_decoder and adapts its multi-signal graph-configuration, syndrome,
+// and result interfaces to the single 32-bit write / 32-bit read register pair
+// exposed by AXI GPIO:
+//   - Buffers multi-word graph parameters (staging[0:7]) and syndromes (shot)
+//     across sequential commands.
+//   - Sequences graph begin/append/commit, decode launch, and shot abort
+//     against qec_decoder.
+//   - Latches each finished decode's prediction, cycle count, and error flag,
+//     and serves capacities, graph state, and results 16 bits at a time via
+//     metadata reads (opcode 7).
+//
+// Both sides share one 100 MHz fabric clock, and only one command may be in
+// flight at a time.
+//
+// Parameters:
+//   MAX_DETECTORS   - maximum supported detector count (forwarded to core; metadata 1).
+//   MAX_EDGES       - maximum supported graph edge count (forwarded to core; metadata 2).
+//   MAX_OBSERVABLES - maximum supported observable count (forwarded to core; metadata 3).
+//
+// Ports:
+//   clk    (in)  - 100 MHz fabric clock shared with AXI GPIO and qec_decoder.
+//   rst    (in)  - active-high synchronous reset; clears FSM, status, staging
+//                  and syndrome buffers, cached results, generation, and core.
+//   ctrl   (in)  - 32-bit command register written by ARM (ARM -> PL).
+//   status (out) - 32-bit status and metadata readback register (PL -> ARM).
+//
+// ctrl (ARM -> PL)
+//  31    30:28     27:24      23:16             15:0
+// +-----+---------+----------+-----------------+------------------+
+// | REQ | ignored | OPCODE   | INDEX           | DATA             |
+// +-----+---------+----------+-----------------+------------------+
+//    1       3         4              8                  16 bits
+//   REQ     [31]    : request toggle bit; flip to != status.ACK after setting
+//                     the other fields to issue a command, and hold ctrl
+//                     steady until status.ACK matches.
+//   ignored [30:28] : unused by PL (software writes 0).
+//   OPCODE  [27:24] : command selector (1..8 below; other values set ERROR).
+//   INDEX   [23:16] : target index for op 1 (staging 0..7), op 5 (syndrome
+//                     word 0..WORDS-1), or op 7 (metadata 0..14). Must be 0
+//                     for ops 2, 3, 4, 6, and 8 (nonzero sets ERROR).
+//   DATA    [15:0]  : 16-bit write payload for op 1 (staging) or op 5
+//                     (syndrome slice). Ignored by all other opcodes.
+//
+// status (PL -> ARM)
+//  31    30     29      28:16                   15:0
+// +-----+------+-------+-----------------------+------------------+
+// | ACK | DONE | ERROR | zero                  | READ_DATA        |
+// +-----+------+-------+-----------------------+------------------+
+//    1      1      1              13                     16 bits
+//   ACK       [31]    : acknowledge toggle bit; flips to match ctrl.REQ once
+//                       the command completes (on success or error). Resets
+//                       to 0.
+//   DONE      [30]    : latched decode-complete flag (1 once a decode finishes
+//                       and metadata 10..14 hold its result, even when
+//                       ERROR=1). Cleared by reset, op 2 (graph begin), or
+//                       op 8 (shot abort).
+//   ERROR     [29]    : error flag for the latest acknowledged command only
+//                       (bad opcode/index, rejected graph/syndrome write,
+//                       decode error on op 6, or invalid metadata index on
+//                       op 7). Cleared by the next succeeding command without
+//                       clearing saved_error (metadata 14).
+//   zero      [28:16] : reserved, always driven 0 by PL.
+//   READ_DATA [15:0]  : metadata register value for a valid op 7; 0 for all
+//                       other commands and invalid metadata reads.
+//
+// Opcodes:
+//   1 = write staging register (INDEX 0..7)
+//   2 = begin graph load using staging[0..2]
+//   3 = append edge using staging[3..7]
+//   4 = commit graph (increments `generation` on success)
+//   5 = write 16-bit syndrome word (INDEX w -> detectors 16*w .. 16*w+15)
+//   6 = launch decode (requires all active syndrome words written fresh)
+//   7 = read metadata register INDEX (0..14) into status.READ_DATA
+//   8 = abort current shot / clear cached result while keeping the graph
+// See docs/decoder-design.md for the full protocol specification.
 module ps_bridge #(
     parameter integer MAX_DETECTORS = 128,
     parameter integer MAX_EDGES = 512,
@@ -18,59 +92,8 @@ module ps_bridge #(
         LAUNCH, WAIT_RESULT, ABORT_SHOT, ABORT_ACK
     } state_t;
     state_t state;
-    // GPIO mailbox word layouts.
-    //
-    // ctrl (ARM -> PL)
-    //  31    30:28     27:24      23:16             15:0
-    // +-----+---------+----------+-----------------+------------------+
-    // | REQ | ignored | OPCODE   | INDEX           | DATA             |
-    // +-----+---------+----------+-----------------+------------------+
-    //    1       3         4              8                  16 bits
-    //   REQ     [31]    : request toggle bit; flip to != status.ACK after setting
-    //                     the other fields to issue a command, and hold ctrl
-    //                     steady until status.ACK matches.
-    //   ignored [30:28] : unused by PL (software writes 0).
-    //   OPCODE  [27:24] : command selector (1..8 below; other values set ERROR).
-    //   INDEX   [23:16] : target index for op 1 (staging 0..7), op 5 (syndrome
-    //                     word 0..WORDS-1), or op 7 (metadata 0..14). Must be 0
-    //                     for ops 2, 3, 4, 6, and 8 (nonzero sets ERROR).
-    //   DATA    [15:0]  : 16-bit write payload for op 1 (staging) or op 5
-    //                     (syndrome slice). Ignored by all other opcodes.
-    //
-    // status (PL -> ARM)
-    //  31    30     29      28:16                   15:0
-    // +-----+------+-------+-----------------------+------------------+
-    // | ACK | DONE | ERROR | zero                  | READ_DATA        |
-    // +-----+------+-------+-----------------------+------------------+
-    //    1      1      1              13                     16 bits
-    //   ACK       [31]    : acknowledge toggle bit; flips to match ctrl.REQ once
-    //                       the command completes (on success or error). Resets
-    //                       to 0.
-    //   DONE      [30]    : latched decode-complete flag (1 once a decode finishes
-    //                       and metadata 10..14 hold its result, even when
-    //                       ERROR=1). Cleared by reset, op 2 (graph begin), or
-    //                       op 8 (shot abort).
-    //   ERROR     [29]    : error flag for the latest acknowledged command only
-    //                       (bad opcode/index, rejected graph/syndrome write,
-    //                       decode error on op 6, or invalid metadata index on
-    //                       op 7). Cleared by the next succeeding command without
-    //                       clearing saved_error (metadata 14).
-    //   zero      [28:16] : reserved, always driven 0 by PL.
-    //   READ_DATA [15:0]  : metadata register value for a valid op 7; 0 for all
-    //                       other commands and invalid metadata reads.
-    //
-    // Opcodes:
-    //   1 = write staging register (INDEX 0..7)
-    //   2 = begin graph load using staging[0..2]
-    //   3 = append edge using staging[3..7]
-    //   4 = commit graph (increments `generation` on success)
-    //   5 = write 16-bit syndrome word (INDEX w -> detectors 16*w .. 16*w+15)
-    //   6 = launch decode (requires all active syndrome words written fresh)
-    //   7 = read metadata register INDEX (0..14) into status.READ_DATA
-    //   8 = abort current shot / clear cached result while keeping the graph
-    // See docs/decoder-design.md for the full protocol specification.
-    //
-    // Staging register map (written via opcode 1):
+
+    // Staging registers (written via opcode 1, INDEX 0..7):
     //   0 = detector_count, 1 = edge_count, 2 = observable_count,
     //   3 = edge_index,     4 = endpoint_a, 5 = endpoint_b,
     //   6 = mask_lo,        7 = mask_hi.
@@ -80,10 +103,10 @@ module ps_bridge #(
     // +-----------------------------+---------------------------------+
     // | staging[7]: mask high       | staging[6]: mask low            |
     // +-----------------------------+---------------------------------+
-    //
-    // Syndrome packing (opcode 5, INDEX = w): DATA[b] is detector 16*w + b
-    // (b = 0..15). Any bit at or above detector_count must be 0.
     logic [15:0] staging [0:7];
+
+    // Syndrome buffer (opcode 5, INDEX = w): DATA[b] is detector 16*w + b
+    // (b = 0..15). Any bit at or above detector_count must be 0.
     logic [WORDS*16-1:0] shot;
     logic [WORDS-1:0] written_words;
     logic request_bit;
